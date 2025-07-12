@@ -1,0 +1,158 @@
+.video-container {
+    width: 100%;
+    background-color: #000;
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 4/3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-container img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+{% extends "base.html" %}
+
+{% block title %}GestureDrive - Hand Gesture Control{% endblock %}
+
+{% block content %}
+<div>
+<div class="col-md-8">
+    <div class="card">
+        <div class="card-header">
+<h3>
+Live Webcam Feed
+
+</h3>
+</div>
+<div>
+            <div class="video-container">
+                <!-- MJPEG stream from the server -->
+                <img src="{{ url_for('video_feed') }}" class="img-fluid" alt="Webcam Stream">
+</div>
+<div>
+<h5>
+Status:
+
+<span>
+Running
+
+</span>
+</h5>
+<h5>
+FPS:
+
+<span>
+0
+
+</span>
+</h5>
+</div>
+        </div>
+    </div>
+</div>
+<div>
+    <div class="card">
+        <div class="card-header">
+<h3>
+Gesture Controls
+
+</h3>
+</div>
+<div>
+            <div class="status-indicator mb-3">
+<span>
+System Ready
+
+</span>
+</div>
+<div>
+<h4>
+Recognized Gesture:
+
+</h4>
+<p>
+None
+
+</p>
+</div>
+<div>
+<h4>
+Available Gestures:
+
+</h4>
+<ul>
+<li>
+👆 Point Up - Move Forward
+
+</li>
+<li>
+👇 Point Down - Move Backwards
+
+</li>
+<li>
+👈 Point Left - Turn Left
+
+</li>
+<li>
+👉 Point Right - Turn Right
+
+</li>
+<li>
+✋ Open Palm - Stop
+
+</li>
+</ul>
+</div>
+        </div>
+    </div>
+</div>
+</div> {% endblock %}
+{% block scripts %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Update status and FPS regularly
+    setInterval(updateStatus, 1000);
+    
+    // Simulated gesture detection (will be replaced with real implementation)
+    const gestures = ['None', 'Point Up', 'Point Down', 'Point Left', 'Point Right', 'Open Palm'];
+    const gestureDisplay = document.getElementById('current-gesture');
+    
+    // Just for demo purposes - will be replaced with actual detection
+    setInterval(() => {
+        const randomIndex = Math.floor(Math.random() * gestures.length);
+        gestureDisplay.textContent = gestures[randomIndex];
+    }, 3000);
+});
+
+function updateStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            const statusText = document.getElementById('status-text');
+            const fpsCounter = document.getElementById('fps-counter');
+            
+            if (data.status === 'online') {
+                statusText.textContent = 'Running';
+                statusText.className = 'badge bg-success';
+                fpsCounter.textContent = data.fps || '0';
+            } else {
+                statusText.textContent = 'Offline';
+                statusText.className = 'badge bg-danger';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking system status:', error);
+            const statusText = document.getElementById('status-text');
+            statusText.textContent = 'Error';
+            statusText.className = 'badge bg-warning';
+        });
+}
+</script>
+{% endblock %}
+
