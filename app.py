@@ -7,18 +7,21 @@ import time
 # Initialize the Flask app
 app = Flask(__name__)
 
-# Initialize camera when the app starts
+# We'll use a global camera variable
 camera = None
 
-@app.before_first_request
-def initialize():
-    """Initialize the camera when the first request comes in"""
+def get_or_init_camera():
+    """Get the current camera instance or initialize it if not yet created"""
     global camera
-    camera = init_camera()
+    if camera is None:
+        camera = init_camera()
+    return camera
 
 @app.route('/')
 def index():
     """Home page with webcam feed and controls"""
+    # Ensure camera is initialized when accessing the home page
+    get_or_init_camera()
     return render_template('index.html')
 
 @app.route('/about')
@@ -34,25 +37,19 @@ def settings():
 @app.route('/api/status')
 def status():
     """API endpoint for checking system status"""
-    if not camera:
-        return jsonify({
-            'status': 'offline',
-            'webcam_available': False,
-            'gesture_system': 'not initialized'
-        })
+    cam = get_or_init_camera()
     
     return jsonify({
         'status': 'online',
         'webcam_available': True,
         'gesture_system': 'ready',
-        'fps': camera.fps
+        'fps': cam.fps
     })
 
 @app.route('/api/settings', methods=['POST'])
 def update_settings():
     """Update camera and detection settings"""
-    if not camera:
-        return jsonify({'success': False, 'error': 'Camera not initialized'})
+    cam = get_or_init_camera()
     
     try:
         data = request.json
@@ -62,16 +59,16 @@ def update_settings():
             pass
         
         if 'detectionConfidence' in data:
-            camera.min_detection_confidence = float(data['detectionConfidence'])
+            cam.min_detection_confidence = float(data['detectionConfidence'])
             
         if 'trackingConfidence' in data:
-            camera.min_tracking_confidence = float(data['trackingConfidence'])
+            cam.min_tracking_confidence = float(data['trackingConfidence'])
             
         if 'displayLandmarks' in data:
-            camera.show_landmarks = bool(data['displayLandmarks'])
+            cam.show_landmarks = bool(data['displayLandmarks'])
             
         if 'mirrorMode' in data:
-            camera.mirror = bool(data['mirrorMode'])
+            cam.mirror = bool(data['mirrorMode'])
         
         return jsonify({'success': True})
     except Exception as e:
@@ -79,11 +76,10 @@ def update_settings():
 
 def gen_frames():
     """Generator function for video streaming"""
-    if not camera:
-        return
+    cam = get_or_init_camera()
     
     while True:
-        frame = camera.get_frame()
+        frame = cam.get_frame()
         if frame is not None:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
@@ -101,10 +97,19 @@ def video_feed():
 @app.route('/shutdown')
 def shutdown():
     """Shutdown the camera and application"""
+    global camera
     if camera:
         camera.stop()
-    # Note: This doesn't actually shut down the Flask server
+        camera = None
     return "Camera has been shut down."
+
+@app.teardown_appcontext
+def shutdown_camera(exception=None):
+    """Ensure camera is shut down when the application context ends"""
+    global camera
+    if camera:
+        camera.stop()
+        camera = None
 
 if __name__ == '__main__':
     try:
