@@ -143,3 +143,19 @@ function updateStatus() {
 </script>
 {% endblock %}
 
+<div>
+    <img src="{{ url_for('video_feed') }}" class="img-fluid" id="webcam-stream" alt="Webcam Stream">
+    <div class="stream-controls mt-2">
+    <button>
+    Reload Stream
+    
+    </button>
+</div>
+</div> <!-- Add this to the scripts block in index.html -->
+<script>
+// Reload the video stream
+document.getElementById('reload-stream').addEventListener('click', function() {
+    const streamImg = document.getElementById('webcam-stream');
+    streamImg.src = "{{ url_for('video_feed') }}?" + new Date().getTime();
+});
+</script>

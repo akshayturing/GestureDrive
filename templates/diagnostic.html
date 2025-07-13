@@ -1,0 +1,323 @@
+<!-- {% extends "base.html" %}
+
+{% block title %}GestureDrive Diagnostics{% endblock %}
+
+{% block content %}
+<div>
+<div class="card-header">
+<h2>
+System Diagnostics
+
+</h2>
+</div>
+<div>
+    <div class="row mb-4">
+        <div class="col">
+<h3>
+System Information
+
+</h3>
+<ul>
+<li>
+OpenCV Version: {{ opencv_version }}
+
+</li>
+<li>
+Camera Status: {{ camera_status }}
+
+</li>
+<li>
+Camera Info: {{ camera_info }}
+
+</li>
+</ul>
+</div>
+    </div>
+<div>
+        <div class="col">
+<h3>
+Camera Test
+
+</h3>
+            <div class="video-container mb-2">
+                <img src="{{ url_for('video_feed') }}?nocache={{ now }}" class="img-fluid" alt="Camera Test">
+</div>
+<button>
+Restart Camera
+
+</button>
+        </div>
+    </div>
+<div>
+        <div class="col">
+<h3>
+API Status
+
+</h3>
+<pre>
+Loading status...
+
+</pre>
+<button>
+Refresh Status
+
+</button>
+</div>
+    </div>
+</div>
+</div> {% endblock %}
+{% block scripts %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    checkStatus();
+    
+    document.getElementById('check-status').addEventListener('click', function() {
+        checkStatus();
+    });
+    
+    document.getElementById('restart-camera').addEventListener('click', function() {
+        restartCamera();
+    });
+});
+
+function checkStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('status-output').textContent = JSON.stringify(data, null, 2);
+        })
+        .catch(error => {
+            document.getElementById('status-output').textContent = 'Error fetching status: ' + error;
+        });
+}
+
+function restartCamera() {
+    fetch('/restart_camera')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Camera restarted successfully');
+                // Refresh the page to reload the video feed
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                alert('Failed to restart camera: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            alert('Error restarting camera: ' + error);
+        });
+}
+</script>
+{% endblock %} -->
+{% extends "base.html" %}
+
+{% block title %}GestureDrive Diagnostics{% endblock %}
+
+{% block content %}
+<div>
+<div class="card-header">
+<h2>
+System Diagnostics
+
+</h2>
+</div>
+<div>
+    <div class="row mb-4">
+        <div class="col">
+<h3>
+System Information
+
+</h3>
+<ul>
+<li>
+OpenCV Version: {{ opencv_version }}
+
+</li>
+<li>
+Camera Status:
+
+<span>
+{{ camera_status }}
+
+</span>
+</li>
+<li>
+Camera Info: {{ camera_info }}
+
+</li>
+</ul>
+</div>
+    </div>
+<div>
+        <div class="col">
+<h3>
+Camera Test
+
+</h3>
+            <div class="video-container mb-2">
+                <img src="{{ url_for('video_feed') }}?nocache={{ now }}" class="img-fluid" alt="Camera Test">
+</div>
+<div>
+<button>
+Restart Camera
+
+</button>
+<button>
+Test Cleanup
+
+</button>
+<button>
+Reconnect
+
+</button>
+</div>
+        </div>
+    </div>
+<div>
+        <div class="col">
+<h3>
+API Status
+
+</h3>
+<pre>
+Loading status...
+
+</pre>
+<button>
+Refresh Status
+
+</button>
+</div>
+    </div>
+<div>
+        <div class="col">
+<h3>
+Cleanup Log
+
+</h3>
+            <div id="cleanup-log" class="bg-dark text-light p-3" style="max-height: 200px; overflow-y: auto;">
+                Cleanup log will appear here.
+</div>
+        </div>
+    </div>
+</div>
+</div> {% endblock %}
+{% block scripts %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    checkStatus();
+    
+    document.getElementById('check-status').addEventListener('click', function() {
+        checkStatus();
+    });
+    
+    document.getElementById('restart-camera').addEventListener('click', function() {
+        restartCamera();
+    });
+    
+    document.getElementById('test-cleanup').addEventListener('click', function() {
+        testCleanup();
+    });
+    
+    document.getElementById('reconnect-camera').addEventListener('click', function() {
+        reconnectCamera();
+    });
+});
+
+function checkStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('status-output').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('camera-status').textContent = data.status;
+            document.getElementById('camera-status').className = 
+                data.status === 'online' ? 'badge bg-success' : 'badge bg-danger';
+        })
+        .catch(error => {
+            document.getElementById('status-output').textContent = 'Error fetching status: ' + error;
+        });
+}
+
+function restartCamera() {
+    logCleanupAction("Restarting camera...");
+    fetch('/restart_camera')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                logCleanupAction("Camera restarted successfully");
+                // Refresh the page to reload the video feed
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                logCleanupAction("Failed to restart camera: " + (data.error || "Unknown error"));
+            }
+        })
+        .catch(error => {
+            logCleanupAction("Error restarting camera: " + error);
+        });
+}
+
+function testCleanup() {
+    logCleanupAction("Testing camera cleanup...");
+    fetch('/shutdown')
+        .then(response => response.text())
+        .then(data => {
+            logCleanupAction("Cleanup result: " + data);
+            document.getElementById('camera-status').textContent = "Stopped";
+            document.getElementById('camera-status').className = "badge bg-danger";
+            // Update video feed with a message
+            const img = document.querySelector('.video-container img');
+            img.style.display = 'none';
+            const message = document.createElement('div');
+            message.className = 'alert alert-warning text-center';
+            message.textContent = 'Camera has been shut down. Click "Reconnect" to restart it.';
+            img.parentNode.appendChild(message);
+        })
+        .catch(error => {
+            logCleanupAction("Error during cleanup test: " + error);
+        });
+}
+
+function reconnectCamera() {
+    logCleanupAction("Reconnecting camera...");
+    fetch('/restart_camera')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                logCleanupAction("Camera reconnected successfully");
+                // Reload the video feed without refreshing the page
+                const img = document.querySelector('.video-container img');
+                const message = document.querySelector('.video-container .alert');
+                if (message) message.remove();
+                img.style.display = 'block';
+                img.src = "{{ url_for('video_feed') }}?" + new Date().getTime();
+                // Update status
+                document.getElementById('camera-status').textContent = "Running";
+                document.getElementById('camera-status').className = "badge bg-success";
+                checkStatus();
+            } else {
+                logCleanupAction("Failed to reconnect camera: " + (data.error || "Unknown error"));
+            }
+        })
+        .catch(error => {
+            logCleanupAction("Error reconnecting camera: " + error);
+        });
+}
+
+function logCleanupAction(message) {
+    const logElement = document.getElementById('cleanup-log');
+    const timestamp = new Date().toLocaleTimeString();
+    const logMessage = document.createElement('div');
+    logMessage.innerHTML = `
+<span>
+[${timestamp}]
+
+</span>
+${message}`;
+logElement.appendChild(logMessage);
+logElement.scrollTop = logElement.scrollHeight;
+}
+
+</script>
+{% endblock %}
