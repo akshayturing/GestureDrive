@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+<!-- {% extends "base.html" %}
 
 {% block title %}GestureDrive Settings{% endblock %}
 
@@ -129,4 +129,139 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+ -->
+ {% extends "base.html" %}
 
+ {% block title %}GestureDrive Settings{% endblock %}
+ 
+ {% block head %}
+ <!-- Any additional head content for this page -->
+ {% endblock %}
+ 
+ {% block content %}
+ <div>
+ <div class="card-header">
+ <h2>
+ System Settings
+ 
+ </h2>
+ </div>
+ <div>
+     <form id="settings-form">
+         <div class="mb-3">
+ <label>
+ Camera Source
+ 
+ </label>
+ <select>
+ <option>
+ Default Camera
+ 
+ </option>
+ <option>
+ External Camera (if available)
+ 
+ </option>
+ </select>
+ </div>
+ <div>
+ <label>
+ Detection Confidence Threshold (0.0-1.0)
+ 
+ </label>
+             <input type="range" class="form-range" id="detection-confidence" min="0" max="1" step="0.1" value="0.7">
+             <div class="text-center">
+ <span>
+ 0.7
+ 
+ </span>
+ </div>
+         </div>
+ <div>
+ <label>
+ Tracking Confidence Threshold (0.0-1.0)
+ 
+ </label>
+             <input type="range" class="form-range" id="tracking-confidence" min="0" max="1" step="0.1" value="0.5">
+             <div class="text-center">
+ <span>
+ 0.5
+ 
+ </span>
+ </div>
+         </div>
+ <div>
+             <div class="form-check form-switch">
+                 <input class="form-check-input" type="checkbox" id="display-landmarks" checked>
+ <label>
+ Display Hand Landmarks
+ 
+ </label>
+ </div>
+         </div>
+ <div>
+             <div class="form-check form-switch">
+                 <input class="form-check-input" type="checkbox" id="mirror-mode" checked>
+ <label>
+ Mirror Mode
+ 
+ </label>
+ </div>
+         </div>
+ <button>
+ Save Settings
+ 
+ </button>
+     </form>
+ </div>
+ </div> {% endblock %}
+ {% block scripts %}
+ 
+ <script>
+ document.addEventListener('DOMContentLoaded', function() {
+     // Update the displayed confidence values when sliders change
+     document.getElementById('detection-confidence').addEventListener('input', function() {
+         document.getElementById('confidence-value').textContent = this.value;
+     });
+     
+     document.getElementById('tracking-confidence').addEventListener('input', function() {
+         document.getElementById('tracking-value').textContent = this.value;
+     });
+     
+     // Handle form submission
+     document.getElementById('settings-form').addEventListener('submit', function(e) {
+         e.preventDefault();
+         
+         // Collect form data
+         const settings = {
+             camera: document.getElementById('camera-select').value,
+             detectionConfidence: document.getElementById('detection-confidence').value,
+             trackingConfidence: document.getElementById('tracking-confidence').value,
+             displayLandmarks: document.getElementById('display-landmarks').checked,
+             mirrorMode: document.getElementById('mirror-mode').checked
+         };
+         
+         // Send settings to the API
+         fetch('/api/settings', {
+             method: 'POST',
+             headers: {
+                 'Content-Type': 'application/json',
+             },
+             body: JSON.stringify(settings),
+         })
+         .then(response => response.json())
+         .then(data => {
+             if (data.success) {
+                 alert('Settings saved successfully!');
+             } else {
+                 alert('Error saving settings: ' + (data.error || 'Unknown error'));
+             }
+         })
+         .catch(error => {
+             console.error('Error saving settings:', error);
+             alert('Error saving settings. See console for details.');
+         });
+     });
+ });
+ </script>
+ {% endblock %}

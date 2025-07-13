@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+<!-- {% extends "base.html" %}
 
 {% block title %}About GestureDrive{% endblock %}
 
@@ -97,4 +97,108 @@ For array operations and data manipulation
 </li>
 </ul>
 </div>
-</div> {% endblock %}
+</div> {% endblock %} -->
+{% extends "base.html" %}
+
+{% block title %}About GestureDrive{% endblock %}
+
+{% block head %}
+<!-- Any additional head content for this page -->
+{% endblock %}
+
+{% block content %}
+<div>
+<div class="card-header">
+<h2>
+About GestureDrive
+
+</h2>
+</div>
+<div>
+<h3>
+Project Overview
+
+</h3>
+<p>
+GestureDrive is a system that enables control of devices using hand gestures captured through a webcam.
+The system uses computer vision techniques to recognize hand positions and movements, translating them into control commands.
+
+</p>
+<h3>
+How It Works
+
+</h3>
+<ul>
+<li>
+<strong>
+Image Capture:
+
+</strong>
+Your webcam captures video frames in real-time
+
+</li>
+<li>
+<strong>
+Hand Detection:
+
+</strong>
+MediaPipe library identifies hand positions in each frame
+
+</li>
+<li>
+<strong>
+Gesture Recognition:
+
+</strong>
+Machine learning algorithms recognize specific gesture patterns
+
+</li>
+<li>
+<strong>
+Command Execution:
+
+</strong>
+Recognized gestures are translated into control commands
+
+</li>
+</ul>
+<h3>
+Technologies Used
+
+</h3>
+<ul>
+<li>
+<strong>
+OpenCV:
+
+</strong>
+For webcam access and image processing
+
+</li>
+<li>
+<strong>
+MediaPipe:
+
+</strong>
+For hand landmark detection and gesture recognition
+
+</li>
+<li>
+<strong>
+Flask:
+
+</strong>
+For the web interface
+
+</li>
+<li>
+<strong>
+NumPy:
+
+</strong>
+For array operations and data manipulation
+
+</li>
+</ul>
+</div>
+</div> {% endblock %} 
