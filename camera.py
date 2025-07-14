@@ -822,6 +822,15 @@ class Camera:
         self.is_running = False
         self.thread = None
     
+        # Add tracking stability parameters
+        self.landmark_history = {}  # Store landmark history for each hand ID
+        self.history_size = 5       # Number of frames to keep in history
+        self.smoothing_factor = 0.7 # Weight for current landmarks vs history (0-1)
+        self.min_tracking_confidence = 0.3  # Minimum confidence to keep tracking
+        self.last_landmarks = None  # Store last valid landmarks
+        self.frames_without_detection = 0
+        self.max_lost_frames = 10  
+
     def start(self):
         """Start the camera capture thread"""
         if self.is_running:
@@ -1176,8 +1185,7 @@ class Camera:
         
         # Return the processed frame with annotations
         return annotated_frame
-    
-    
+  
     def _analyze_hand_landmarks(self, hand_landmarks, hand_idx=0):
         """
         Analyze hand landmarks for tracking and gesture recognition
@@ -1401,8 +1409,8 @@ class Camera:
         
         return key_landmarks
 
-
     def log_landmarks_to_csv(self, key_landmarks, timestamp=None):
+
         """
         Log the landmark coordinates to a CSV file
         
@@ -1449,3 +1457,109 @@ class Camera:
                 'index_tip_y': key_landmarks['index_tip']['normalized'][1],
                 'index_tip_z': key_landmarks['index_tip']['normalized'][2]
             })
+   
+    def _smooth_landmarks(self, current_landmarks, hand_id=0):
+        """
+        Apply temporal smoothing to reduce jitter in landmark positions
+        
+        Args:
+            current_landmarks: Current frame's hand landmarks
+            hand_id: ID to track multiple hands separately
+            
+        Returns:
+            Smoothed landmarks object
+        """
+        # Initialize history for this hand if it doesn't exist
+        if hand_id not in self.landmark_history:
+            self.landmark_history[hand_id] = []
+        
+        # Create a copy of the landmarks for smoothing
+        smoothed_landmarks = copy.deepcopy(current_landmarks)
+        
+        # Add current landmarks to history
+        self.landmark_history[hand_id].append(current_landmarks)
+        
+        # Keep history at designated size
+        if len(self.landmark_history[hand_id]) > self.history_size:
+            self.landmark_history[hand_id].pop(0)
+        
+        # Apply exponential moving average if we have history
+        if len(self.landmark_history[hand_id]) > 1:
+            # Get the history for this hand
+            history = self.landmark_history[hand_id]
+            
+            # For each landmark point
+            for i in range(len(current_landmarks.landmark)):
+                # Start with current position
+                x = current_landmarks.landmark[i].x * self.smoothing_factor
+                y = current_landmarks.landmark[i].y * self.smoothing_factor
+                z = current_landmarks.landmark[i].z * self.smoothing_factor
+                
+                # Add weighted contributions from history (more recent = higher weight)
+                weight_sum = self.smoothing_factor
+                for j in range(len(history) - 1):
+                    # Calculate weight (decreasing for older frames)
+                    weight = (1.0 - self.smoothing_factor) * (j + 1) / len(history)
+                    x += history[j].landmark[i].x * weight
+                    y += history[j].landmark[i].y * weight
+                    z += history[j].landmark[i].z * weight
+                    weight_sum += weight
+                
+                # Normalize by weight sum
+                if weight_sum > 0:
+                    smoothed_landmarks.landmark[i].x = x / weight_sum
+                    smoothed_landmarks.landmark[i].y = y / weight_sum
+                    smoothed_landmarks.landmark[i].z = z / weight_sum
+        
+        return smoothed_landmarks
+
+    def _is_valid_movement(self, current_landmarks, previous_landmarks, max_velocity=0.3):
+        """
+        Check if movement between frames is realistic or an outlier
+        
+        Args:
+            current_landmarks: Current detected landmarks
+            previous_landmarks: Previous frame's landmarks
+            max_velocity: Maximum allowed normalized velocity between frames
+            
+        Returns:
+            Boolean: True if movement is valid, False if likely an outlier
+        """
+        if not previous_landmarks:
+            return True  # No previous data to compare
+        
+        # Check key landmarks (wrist and fingertips)
+        key_indices = [0, 4, 8, 12, 16, 20]  # Wrist and fingertips
+        
+        for idx in key_indices:
+            curr = current_landmarks.landmark[idx]
+            prev = previous_landmarks.landmark[idx]
+            
+            # Calculate velocity (change in position)
+            velocity = math.sqrt(
+                (curr.x - prev.x)**2 + 
+                (curr.y - prev.y)**2 + 
+                (curr.z - prev.z)**2
+            )
+            
+            if velocity > max_velocity:
+                return False  # Movement too fast, likely an outlier
+        
+        return True  # Movement is valid
+
+    def _visualize_key_landmarks(self, frame, key_landmarks):
+        """Highlight and label the key landmarks on the frame"""
+        # Draw wrist point (red)
+        cv2.circle(frame, key_landmarks['wrist']['pixel'], 8, (0, 0, 255), -1)
+        
+        # Draw thumb tip (green)
+        cv2.circle(frame, key_landmarks['thumb_tip']['pixel'], 8, (0, 255, 0), -1)
+        
+        # Draw index tip (blue)
+        cv2.circle(frame, key_landmarks['index_tip']['pixel'], 8, (255, 0, 0), -1)
+        
+        # Draw connecting lines for better visualization
+        cv2.line(frame, key_landmarks['wrist']['pixel'], 
+                key_landmarks['thumb_tip']['pixel'], (0, 255, 255), 2)
+        cv2.line(frame, key_landmarks['wrist']['pixel'], 
+                key_landmarks['index_tip']['pixel'], (255, 0, 255), 2)
