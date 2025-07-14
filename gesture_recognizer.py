@@ -1,5 +1,5 @@
 import math
-
+import time
 class GestureRecognizer:
     def __init__(self, buffer_size=5):
         # Define recognized gestures and their corresponding commands
@@ -16,7 +16,10 @@ class GestureRecognizer:
         self.buffer_size = buffer_size
         self.gesture_buffer = []
         self.current_gesture = "unknown"
-    
+        self.previous_gesture = "unknown"
+        # Initialize gesture timing attributes if needed
+        self.gesture_start_time = time.time()
+        self.gesture_duration = 0.0
     def recognize_gesture(self, hand_landmarks):
         """Recognize gesture based on hand landmarks"""
         if not hand_landmarks:

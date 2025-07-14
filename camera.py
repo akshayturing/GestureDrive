@@ -1548,6 +1548,7 @@ class Camera:
         return True  # Movement is valid
 
     def _visualize_key_landmarks(self, frame, key_landmarks):
+
         """Highlight and label the key landmarks on the frame"""
         # Draw wrist point (red)
         cv2.circle(frame, key_landmarks['wrist']['pixel'], 8, (0, 0, 255), -1)
@@ -1563,3 +1564,86 @@ class Camera:
                 key_landmarks['thumb_tip']['pixel'], (0, 255, 255), 2)
         cv2.line(frame, key_landmarks['wrist']['pixel'], 
                 key_landmarks['index_tip']['pixel'], (255, 0, 255), 2)
+
+
+import copy
+
+class LandmarkSmoother:
+    def __init__(self, smoothing_factor=0.3, history_size=5):
+        """
+        Initialize the landmark smoother
+        
+        Args:
+            smoothing_factor: Weight for new values vs. previous values (0-1)
+                              Lower values create more smoothing but more lag
+            history_size: Number of frames to keep in history for advanced filtering
+        """
+        self.smoothing_factor = smoothing_factor
+        self.history_size = history_size
+        self.landmark_history = []
+        self.prev_landmarks = None
+        self.lost_frames = 0
+    
+    def update(self, new_landmarks):
+        """
+        Update the smoothed landmarks with new detected landmarks
+        
+        Args:
+            new_landmarks: New MediaPipe hand landmarks, or None if not detected
+            
+        Returns:
+            Smoothed landmarks or None if landmarks can't be predicted
+        """
+        # If no landmarks detected
+        if new_landmarks is None:
+            self.lost_frames += 1
+            # If we have previous landmarks, try to predict current position
+            if self.prev_landmarks and self.lost_frames < 5:
+                return self.prev_landmarks
+            # If lost for too many frames, can't predict
+            return None
+        
+        # Reset lost frame counter
+        self.lost_frames = 0
+        
+        # Initialize first landmarks
+        if self.prev_landmarks is None:
+            self.prev_landmarks = self._copy_landmarks(new_landmarks)
+            return new_landmarks
+        
+        # Add to history
+        self.landmark_history.append(self._extract_landmark_positions(new_landmarks))
+        if len(self.landmark_history) > self.history_size:
+            self.landmark_history.pop(0)
+        
+        # Apply smoothing filter
+        smoothed = self._apply_smoothing(new_landmarks)
+        self.prev_landmarks = smoothed
+        
+        return smoothed
+    
+    def _copy_landmarks(self, landmarks):
+        """Create a deep copy of landmarks to avoid modifying the original"""
+        return copy.deepcopy(landmarks)
+    
+    def _extract_landmark_positions(self, landmarks):
+        """Extract positions from landmarks for history tracking"""
+        positions = []
+        for landmark in landmarks.landmark:
+            positions.append((landmark.x, landmark.y, landmark.z))
+        return positions
+    
+    def _apply_smoothing(self, new_landmarks):
+        """Apply smoothing to landmarks"""
+        result = self._copy_landmarks(new_landmarks)
+        
+        # Apply exponential smoothing to each landmark
+        for i, landmark in enumerate(new_landmarks.landmark):
+            result.landmark[i].x = (self.smoothing_factor * landmark.x + 
+                                  (1 - self.smoothing_factor) * self.prev_landmarks.landmark[i].x)
+            result.landmark[i].y = (self.smoothing_factor * landmark.y + 
+                                  (1 - self.smoothing_factor) * self.prev_landmarks.landmark[i].y)
+            result.landmark[i].z = (self.smoothing_factor * landmark.z + 
+                                  (1 - self.smoothing_factor) * self.prev_landmarks.landmark[i].z)
+        
+        return result
