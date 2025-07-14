@@ -134,3 +134,46 @@ class GestureRecognizer:
             (landmark1.y - landmark2.y)**2 +
             (landmark1.z - landmark2.z)**2
         )
+    
+    def update_gesture(self, hand_landmarks, frame_shape=None):
+        """
+        Update current gesture with smoothing
+        
+        Args:
+            hand_landmarks: MediaPipe hand landmarks object
+            frame_shape: Optional tuple of (height, width) for coordinate normalization
+        """
+        gesture = self.recognize_gesture(hand_landmarks)
+        
+        # Add to buffer
+        self.gesture_buffer.append(gesture)
+        if len(self.gesture_buffer) > self.buffer_size:
+            self.gesture_buffer.pop(0)
+        
+        # Find most common gesture in buffer
+        if self.gesture_buffer:
+            # Count occurrences of each gesture
+            gesture_counts = {}
+            for g in self.gesture_buffer:
+                if g in gesture_counts:
+                    gesture_counts[g] += 1
+                else:
+                    gesture_counts[g] = 1
+            
+            # Find the most common gesture
+            most_common = max(gesture_counts.items(), key=lambda x: x[1])
+            
+            # Only update if the gesture appears more than threshold % of the time
+            threshold_ratio = 0.5  # 50%
+            if most_common[1] > len(self.gesture_buffer) * threshold_ratio:
+                self.current_gesture = most_common[0]
+        
+        # Track additional information for gesture timing and state changes
+        current_time = time.time()
+        if self.current_gesture != self.previous_gesture:
+            self.gesture_start_time = current_time
+            self.previous_gesture = self.current_gesture
+        
+        self.gesture_duration = current_time - self.gesture_start_time
+        
+        return self.current_gesture

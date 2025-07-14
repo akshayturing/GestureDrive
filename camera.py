@@ -874,38 +874,38 @@ class Camera:
             # Slight sleep to reduce CPU usage
             time.sleep(0.01)
     
-    def _process_frame(self, frame):
-        """Process frame to detect hands and draw landmarks"""
-        # Convert BGR to RGB for MediaPipe (MediaPipe requires RGB input)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # def _process_frame(self, frame):
+    #     """Process frame to detect hands and draw landmarks"""
+    #     # Convert BGR to RGB for MediaPipe (MediaPipe requires RGB input)
+    #     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Process the RGB frame with MediaPipe
-        results = self.hands.process(rgb_frame)
+    #     # Process the RGB frame with MediaPipe
+    #     results = self.hands.process(rgb_frame)
         
-        # Store the hand landmarks data for external use
-        self.hand_landmarks_data = results.multi_hand_landmarks
+    #     # Store the hand landmarks data for external use
+    #     self.hand_landmarks_data = results.multi_hand_landmarks
         
-        # Create a copy of the frame to draw on
-        annotated_frame = frame.copy()
+    #     # Create a copy of the frame to draw on
+    #     annotated_frame = frame.copy()
         
-        # Draw FPS information
-        cv2.putText(annotated_frame, f"FPS: {self.fps:.1f}", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    #     # Draw FPS information
+    #     cv2.putText(annotated_frame, f"FPS: {self.fps:.1f}", (10, 30), 
+    #                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
-        # Draw hand landmarks if enabled
-        if self.show_landmarks and results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                # Draw the hand landmarks
-                self.mp_drawing.draw_landmarks(
-                    annotated_frame,
-                    hand_landmarks,
-                    self.mp_hands.HAND_CONNECTIONS,
-                    self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                    self.mp_drawing_styles.get_default_hand_connections_style()
-                )
+    #     # Draw hand landmarks if enabled
+    #     if self.show_landmarks and results.multi_hand_landmarks:
+    #         for hand_landmarks in results.multi_hand_landmarks:
+    #             # Draw the hand landmarks
+    #             self.mp_drawing.draw_landmarks(
+    #                 annotated_frame,
+    #                 hand_landmarks,
+    #                 self.mp_hands.HAND_CONNECTIONS,
+    #                 self.mp_drawing_styles.get_default_hand_landmarks_style(),
+    #                 self.mp_drawing_styles.get_default_hand_connections_style()
+    #             )
         
-        # Return the processed frame with annotations
-        return annotated_frame
+    #     # Return the processed frame with annotations
+    #     return annotated_frame
     
     def get_frame(self, processed=True):
         """Return the current frame (processed or raw)"""
@@ -941,3 +941,190 @@ class Camera:
         
         if hasattr(self, 'cap') and self.cap:
             self.cap.release()
+
+    def _process_frame(self, frame):
+        """
+        Process frame to detect hands and extract landmarks
+        
+        Steps:
+        1. Convert BGR to RGB for MediaPipe
+        2. Pass the RGB frame to the Hands detection module
+        3. Extract landmark coordinates if hands are detected
+        4. Analyze the hand position and orientation
+        5. Visualize the results on the frame
+        """
+        # Step 1: Convert BGR to RGB for MediaPipe (MediaPipe requires RGB input)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Step 2: Process the RGB frame with MediaPipe Hands
+        results = self.hands.process(rgb_frame)
+        
+        # Create a copy of the frame to draw on
+        annotated_frame = frame.copy()
+        
+        # Draw FPS information
+        cv2.putText(annotated_frame, f"FPS: {self.fps:.1f}", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        # Step 3: Extract landmark coordinates if hands are detected
+        if results.multi_hand_landmarks:
+            # Store the hand landmarks data for external use
+            self.hand_landmarks_data = results.multi_hand_landmarks
+            
+            # Process each detected hand
+            for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+                # Extract hand classification (Left/Right) if available
+                hand_label = "Hand"
+                if results.multi_handedness and len(results.multi_handedness) > hand_idx:
+                    hand_classification = results.multi_handedness[hand_idx]
+                    hand_label = f"{hand_classification.classification[0].label} Hand"
+                    confidence = hand_classification.classification[0].score
+                    hand_label = f"{hand_label} ({confidence:.2f})"
+                
+                # Draw the appropriate label
+                wrist_landmark = hand_landmarks.landmark[0]  # Wrist landmark
+                x, y = int(wrist_landmark.x * frame.shape[1]), int(wrist_landmark.y * frame.shape[0])
+                cv2.putText(annotated_frame, hand_label, (x - 10, y - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                
+                # Step 4: Extract and analyze landmarks
+                self._analyze_hand_landmarks(hand_landmarks, hand_idx)
+                
+                # Step 5: Draw the hand landmarks on the frame
+                self.mp_drawing.draw_landmarks(
+                    annotated_frame,
+                    hand_landmarks,
+                    self.mp_hands.HAND_CONNECTIONS,
+                    self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                    self.mp_drawing_styles.get_default_hand_connections_style()
+                )
+        else:
+            # No hands detected
+            self.hand_landmarks_data = None
+            cv2.putText(annotated_frame, "No hands detected", (10, 60), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+        # Return the processed frame with annotations
+        return annotated_frame
+
+    def _analyze_hand_landmarks(self, hand_landmarks, hand_idx=0):
+        """
+        Analyze hand landmarks for tracking and gesture recognition
+        
+        Args:
+            hand_landmarks: MediaPipe hand landmarks
+            hand_idx: Index of the hand if multiple hands are detected
+        """
+        # Create a structured representation of the landmarks
+        landmarks_array = []
+        
+        # Extract 3D coordinates for all 21 landmarks
+        for idx, landmark in enumerate(hand_landmarks.landmark):
+            # Convert normalized coordinates to pixel values for the frame
+            landmarks_array.append({
+                'id': idx,
+                'x': landmark.x,  # Normalized X (0.0 to 1.0)
+                'y': landmark.y,  # Normalized Y (0.0 to 1.0)
+                'z': landmark.z,  # Normalized Z (depth)
+                'name': self._get_landmark_name(idx)
+            })
+        
+        # Calculate key metrics for hand analysis
+        
+        # 1. Hand openness (distance between thumb tip and pinky tip)
+        thumb_tip = hand_landmarks.landmark[4]
+        pinky_tip = hand_landmarks.landmark[20]
+        hand_openness = self._calculate_distance(thumb_tip, pinky_tip)
+        
+        # 2. Hand orientation (wrist to middle finger MCP vector)
+        wrist = hand_landmarks.landmark[0]
+        middle_mcp = hand_landmarks.landmark[9]
+        hand_orientation = (middle_mcp.x - wrist.x, middle_mcp.y - wrist.y)
+        
+        # Store the analysis results for this hand
+        hand_analysis = {
+            'hand_idx': hand_idx,
+            'landmarks': landmarks_array,
+            'hand_openness': hand_openness,
+            'hand_orientation': hand_orientation
+        }
+        
+        # Store the analysis for external access
+        # This can be used by gesture recognition and other modules
+        if not hasattr(self, 'hand_analysis_data'):
+            self.hand_analysis_data = []
+        
+        # Update or add this hand's analysis
+        if len(self.hand_analysis_data) <= hand_idx:
+            self.hand_analysis_data.append(hand_analysis)
+        else:
+            self.hand_analysis_data[hand_idx] = hand_analysis
+        
+        return hand_analysis
+
+    def _calculate_distance(self, landmark1, landmark2):
+        """Calculate 3D distance between two landmarks"""
+        return ((landmark1.x - landmark2.x) ** 2 + 
+                (landmark1.y - landmark2.y) ** 2 + 
+                (landmark1.z - landmark2.z) ** 2) ** 0.5
+
+    def _get_landmark_name(self, idx):
+        """Get the anatomical name of a landmark by its index"""
+        landmark_names = [
+            "WRIST",
+            "THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP",
+            "INDEX_FINGER_MCP", "INDEX_FINGER_PIP", "INDEX_FINGER_DIP", "INDEX_FINGER_TIP",
+            "MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP",
+            "RING_FINGER_MCP", "RING_FINGER_PIP", "RING_FINGER_DIP", "RING_FINGER_TIP",
+            "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP"
+        ]
+        return landmark_names[idx] if 0 <= idx < len(landmark_names) else f"UNKNOWN_{idx}"
+
+    def get_hand_analysis(self):
+        """Return the current hand analysis data for external use"""
+        if hasattr(self, 'hand_analysis_data'):
+            return self.hand_analysis_data
+        return None
+
+    def get_landmark_coordinates(self, hand_idx=0):
+        """
+        Get the landmark coordinates for a specific hand
+        
+        Returns:
+            dict: Dictionary of landmark coordinates with keys:
+                - 'wrist': (x, y) of wrist
+                - 'thumb_tip': (x, y) of thumb tip
+                - 'index_tip': (x, y) of index finger tip
+                - 'middle_tip': (x, y) of middle finger tip
+                - 'ring_tip': (x, y) of ring finger tip
+                - 'pinky_tip': (x, y) of pinky tip
+        """
+        if not self.hand_landmarks_data or hand_idx >= len(self.hand_landmarks_data):
+            return None
+        
+        hand_landmarks = self.hand_landmarks_data[hand_idx]
+        
+        # Get current frame size for converting normalized coordinates to pixels
+        frame = self.get_frame(processed=False)
+        if frame is None:
+            return None
+        
+        height, width = frame.shape[:2]
+        
+        # Extract key landmarks
+        wrist = hand_landmarks.landmark[0]
+        thumb_tip = hand_landmarks.landmark[4]
+        index_tip = hand_landmarks.landmark[8]
+        middle_tip = hand_landmarks.landmark[12]
+        ring_tip = hand_landmarks.landmark[16]
+        pinky_tip = hand_landmarks.landmark[20]
+        
+        # Convert normalized coordinates to pixel coordinates
+        return {
+            'wrist': (int(wrist.x * width), int(wrist.y * height)),
+            'thumb_tip': (int(thumb_tip.x * width), int(thumb_tip.y * height)),
+            'index_tip': (int(index_tip.x * width), int(index_tip.y * height)),
+            'middle_tip': (int(middle_tip.x * width), int(middle_tip.y * height)),
+            'ring_tip': (int(ring_tip.x * width), int(ring_tip.y * height)),
+            'pinky_tip': (int(pinky_tip.x * width), int(pinky_tip.y * height))
+        }
