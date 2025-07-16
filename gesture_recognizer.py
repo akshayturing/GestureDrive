@@ -180,3 +180,30 @@ class GestureRecognizer:
         self.gesture_duration = current_time - self.gesture_start_time
         
         return self.current_gesture
+
+    def detect_dynamic_gestures(self, camera):
+        """
+        Detect dynamic gestures using the landmark buffer from camera
+        
+        Args:
+            camera: Camera instance with landmark buffer
+            
+        Returns:
+            Detected dynamic gesture or None
+        """
+        # No hand landmarks detected
+        if not camera.hand_landmarks_data:
+            return None
+        
+        # Detect swipe gestures
+        swipe = camera.detect_swipe_gesture(threshold=0.15)
+        if swipe:
+            return swipe
+        
+        # Get motion of index fingertip
+        motion = camera.get_landmark_motion(landmark_idx=8)
+        
+        # Example: detect circular motion
+        # This would need more sophisticated trajectory analysis
+        
+        return None
