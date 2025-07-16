@@ -1770,6 +1770,53 @@ class LandmarkBuffer:
             self.frames.clear()
             self.timestamps.clear()
 
+    def get_fingertips_sequence(self, hand_idx=0):
+        """
+        Get the trajectory of all fingertips (thumb, index, middle, ring, pinky) 
+        across buffered frames.
+        
+        Args:
+            hand_idx: Hand index (0 for first hand, 1 for second hand if present)
+            
+        Returns:
+            Dictionary of fingertip trajectories and timestamps
+        """
+        # Fingertip landmark indices in MediaPipe hand model
+        fingertip_indices = {
+            'thumb': 4,
+            'index': 8,
+            'middle': 12,
+            'ring': 16,
+            'pinky': 20
+        }
+        
+        result = {}
+        with self.lock:
+            for finger_name, landmark_idx in fingertip_indices.items():
+                points = []
+                frame_times = []
+                
+                for idx, (frame_data, timestamp) in enumerate(zip(self.frames, self.timestamps)):
+                    # Skip frames where the specified hand is not detected
+                    if not frame_data or hand_idx >= len(frame_data):
+                        continue
+                    
+                    # Get the specified landmark coordinates
+                    hand_data = frame_data[hand_idx]
+                    if landmark_idx < len(hand_data):
+                        points.append(hand_data[landmark_idx])
+                        frame_times.append(timestamp)
+                
+                # Store as numpy arrays
+                if points:
+                    result[finger_name] = {
+                        'points': np.array(points),
+                        'timestamps': np.array(frame_times)
+                    }
+                else:
+                    result[finger_name] = {'points': np.array([]), 'timestamps': np.array([])}
+        
+        return result
 
 # Update the existing Camera class in camera.py
 class Camera:
@@ -1987,6 +2034,208 @@ class Camera:
         
         return None
     
+    def get_whole_hand_motion(self, hand_idx=0, min_frames=5, displacement_threshold=0.03, 
+                              consensus_threshold=0.8):
+        """
+        Analyze motion of all fingertips to determine if the entire hand is moving.
+        Only detects directional movement when all five fingers show significant displacement.
+        
+        Args:
+            hand_idx: Hand index (default: 0 for first hand)
+            min_frames: Minimum number of frames needed for analysis (default: 5)
+            displacement_threshold: Minimum displacement to consider as significant movement
+            consensus_threshold: Proportion of fingers that must agree on direction (0.8 = 4/5)
+            
+        Returns:
+            Dictionary with motion data including direction, velocity, and validation info
+        """
+        # Get trajectories for all fingertips
+        fingertips = self.landmark_buffer.get_fingertips_sequence(hand_idx)
+        
+        # Check if we have enough data for all fingers
+        if not all(finger in fingertips for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']):
+            return {
+                "direction": "unknown",
+                "velocity": 0,
+                "valid": False,
+                "reason": "missing_fingers"
+            }
+        
+        # Check if we have enough frames for analysis
+        finger_frames = [len(data['points']) for data in fingertips.values()]
+        if min(finger_frames) < min_frames:
+            return {
+                "direction": "unknown",
+                "velocity": 0,
+                "valid": False,
+                "reason": "insufficient_frames"
+            }
+        
+        # Calculate displacement for each finger
+        displacements = {}
+        directions = {}
+        velocities = {}
+        
+        for finger, data in fingertips.items():
+            points = data['points']
+            timestamps = data['timestamps']
+            
+            # Use the oldest and newest points
+            start_point = points[0]
+            end_point = points[-1]
+            start_time = timestamps[0]
+            end_time = timestamps[-1]
+            
+            # Time difference
+            time_diff = end_time - start_time
+            if time_diff <= 0:
+                continue
+            
+            # Calculate 3D displacement vector
+            dx = end_point[0] - start_point[0]
+            dy = end_point[1] - start_point[1]
+            dz = end_point[2] - start_point[2]
+            
+            # Overall displacement magnitude
+            displacement = np.sqrt(dx*dx + dy*dy + dz*dz)
+            displacements[finger] = displacement
+            
+            # Velocity
+            velocity = displacement / time_diff
+            velocities[finger] = velocity
+            
+            # Determine primary direction of this finger
+            if displacement < displacement_threshold:
+                # Movement too small to determine direction
+                directions[finger] = "stationary"
+            elif abs(dx) > abs(dy) and abs(dx) > abs(dz):
+                # Horizontal motion
+                directions[finger] = "right" if dx > 0 else "left"
+            elif abs(dy) > abs(dx) and abs(dy) > abs(dz):
+                # Vertical motion
+                directions[finger] = "down" if dy > 0 else "up"
+            elif abs(dz) > abs(dx) and abs(dz) > abs(dy):
+                # Z-axis motion
+                directions[finger] = "forward" if dz > 0 else "backward"
+            else:
+                directions[finger] = "complex"
+        
+        # Check if all fingers have significant displacement
+        significant_movement = all(d >= displacement_threshold for d in displacements.values())
+        
+        if not significant_movement:
+            return {
+                "direction": "stationary",
+                "velocity": np.mean(list(velocities.values())),
+                "valid": False,
+                "reason": "insufficient_movement",
+                "finger_displacements": displacements
+            }
+        
+        # Check for directional consensus
+        # Count occurrences of each direction
+        direction_counts = {}
+        for direction in directions.values():
+            if direction != "stationary" and direction != "complex":
+                direction_counts[direction] = direction_counts.get(direction, 0) + 1
+        
+        # Find most common direction
+        if direction_counts:
+            most_common_direction = max(direction_counts.items(), key=lambda x: x[1])
+            direction_name = most_common_direction[0]
+            direction_count = most_common_direction[1]
+            
+            # Check if enough fingers agree on the direction
+            if direction_count >= len(directions) * consensus_threshold:
+                # We have a valid hand direction
+                return {
+                    "direction": direction_name,
+                    "velocity": np.mean(list(velocities.values())),
+                    "valid": True,
+                    "finger_directions": directions,
+                    "finger_displacements": displacements,
+                    "consensus": direction_count / len(directions)
+                }
+        
+        # No clear consensus on direction
+        return {
+            "direction": "mixed",
+            "velocity": np.mean(list(velocities.values())),
+            "valid": False,
+            "reason": "inconsistent_direction",
+            "finger_directions": directions,
+            "finger_displacements": displacements
+        }
+    
+    def detect_whole_hand_gesture(self, hand_idx=0, displacement_threshold=0.03, 
+                                 velocity_threshold=0.2):
+        """
+        Detect gestures based on whole hand movement, requiring all fingers
+        to show consistent motion.
+        
+        Args:
+            hand_idx: Hand index to track (default: 0 for first hand)
+            displacement_threshold: Minimum displacement for significant movement
+            velocity_threshold: Minimum velocity to trigger a gesture detection
+            
+        Returns:
+            Detected gesture name or None
+        """
+        # Get whole hand motion analysis
+        motion = self.get_whole_hand_motion(
+            hand_idx=hand_idx, 
+            displacement_threshold=displacement_threshold
+        )
+        
+        # Only report valid whole-hand movements with sufficient velocity
+        if motion["valid"] and motion["velocity"] > velocity_threshold:
+            return f"hand_{motion['direction']}"
+        
+        return None
+    
+    def visualize_hand_motion(self, frame, hand_idx=0):
+        """
+        Visualize hand motion status on the frame.
+        
+        Args:
+            frame: OpenCV frame to draw on
+            hand_idx: Hand index to analyze
+            
+        Returns:
+            Annotated frame
+        """
+        # Get whole hand motion
+        motion = self.get_whole_hand_motion(hand_idx=hand_idx)
+        
+        # Draw the analysis results on the frame
+        if motion["valid"]:
+            # Valid motion detected
+            color = (0, 255, 0)  # Green for valid motion
+            status = f"Hand Direction: {motion['direction']} ({motion['velocity']:.2f})"
+        else:
+            # Invalid or insufficient motion
+            color = (0, 0, 255)  # Red for invalid motion
+            if "reason" in motion:
+                status = f"Status: {motion['reason']}"
+            else:
+                status = "Status: Unknown issue"
+        
+        # Draw status text
+        cv2.putText(frame, status, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        
+        # Draw individual finger statuses if available
+        if "finger_displacements" in motion:
+            y_offset = 90
+            for finger, displacement in motion["finger_displacements"].items():
+                is_moving = displacement >= 0.03  # Use the same threshold
+                finger_status = f"{finger}: {'Moving' if is_moving else 'Stable'} ({displacement:.4f})"
+                finger_color = (0, 255, 0) if is_moving else (0, 165, 255)  # Green if moving, orange if stable
+                cv2.putText(frame, finger_status, (10, y_offset), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, finger_color, 1)
+                y_offset += 25
+        
+        return frame
+
     def get_landmark_trajectory(self, hand_idx=0, landmark_idx=8):
         """
         Get the complete trajectory of a specific landmark.
