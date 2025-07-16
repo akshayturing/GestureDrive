@@ -1654,6 +1654,7 @@ import cv2
 import mediapipe as mp
 import time
 import threading
+
 class LandmarkBuffer:
     """
     Maintains a time-sequenced buffer of hand landmark coordinates
@@ -2249,88 +2250,198 @@ class Camera:
         """
         return self.landmark_buffer.get_landmark_sequence(hand_idx, landmark_idx)
     
-    def is_palm_open(self, hand_landmarks):
+    # def is_palm_open(self, hand_landmarks):
+    #     """
+    #     Determine if the palm is open (all fingers extended).
+        
+    #     Args:
+    #         hand_landmarks: MediaPipe hand landmarks for a single hand
+            
+    #     Returns:
+    #         Boolean indicating if palm is open
+    #     """
+    #     if not hand_landmarks:
+    #         return False
+            
+    #     # MediaPipe landmark indices for fingertips and joints
+    #     # Format: [tip, pip, mcp] for each finger
+    #     finger_indices = {
+    #         'thumb': [4, 3, 2],
+    #         'index': [8, 6, 5],
+    #         'middle': [12, 10, 9],
+    #         'ring': [16, 14, 13],
+    #         'pinky': [20, 18, 17]
+    #     }
+        
+    #     # Check if each finger is extended
+    #     fingers_extended = {}
+        
+    #     for finger, (tip_id, pip_id, mcp_id) in finger_indices.items():
+    #         # Get landmarks
+    #         tip = hand_landmarks.landmark[tip_id]
+    #         pip = hand_landmarks.landmark[pip_id]
+    #         mcp = hand_landmarks.landmark[mcp_id]
+            
+    #         # Special case for thumb due to its different orientation
+    #         if finger == 'thumb':
+    #             # For thumb, check if it's pointing away from palm
+    #             # This is a simplified check - may need adjustment
+    #             thumb_ip = hand_landmarks.landmark[3]  # IP joint
+    #             thumb_cmc = hand_landmarks.landmark[1]  # CMC joint
+                
+    #             # Vector from CMC to IP
+    #             vec1 = (thumb_ip.x - thumb_cmc.x, thumb_ip.y - thumb_cmc.y, thumb_ip.z - thumb_cmc.z)
+    #             # Vector from IP to tip
+    #             vec2 = (tip.x - thumb_ip.x, tip.y - thumb_ip.y, tip.z - thumb_ip.z)
+                
+    #             # Check if these vectors are roughly aligned (dot product > 0)
+    #             dot_product = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2]
+    #             fingers_extended['thumb'] = dot_product > 0
+    #         else:
+    #             # For other fingers, check if they are extended by comparing
+    #             # the y coordinates (in image space, lower y is higher up)
+    #             # and checking straightness
+                
+    #             # Calculate distance from MCP to fingertip directly
+    #             direct_dist = np.sqrt(
+    #                 (tip.x - mcp.x)**2 + 
+    #                 (tip.y - mcp.y)**2 + 
+    #                 (tip.z - mcp.z)**2
+    #             )
+                
+    #             # Calculate distance along the finger joints
+    #             joint_dist = np.sqrt(
+    #                 (pip.x - mcp.x)**2 + 
+    #                 (pip.y - mcp.y)**2 + 
+    #                 (pip.z - mcp.z)**2
+    #             ) + np.sqrt(
+    #                 (tip.x - pip.x)**2 + 
+    #                 (tip.y - pip.y)**2 + 
+    #                 (tip.z - pip.z)**2
+    #             )
+                
+    #             # If finger is extended, direct distance will be close to joint distance
+    #             # If bent, direct distance will be much less
+    #             straightness = direct_dist / joint_dist if joint_dist > 0 else 0
+                
+    #             # Consider finger extended if reasonably straight and pointing outward
+    #             fingers_extended[finger] = (straightness > 0.7 and tip.y < mcp.y)
+        
+    #     # Palm is considered open if all fingers are extended
+    #     # Or if at least 4 out of 5 fingers (excluding thumb) are extended
+    #     num_extended = sum(1 for extended in fingers_extended.values() if extended)
+    #     return num_extended >= 4  # Allow one finger to be bent
+    
+    def is_palm_open(self, hand_idx=0, extension_threshold=0.5):
         """
-        Determine if the palm is open (all fingers extended).
+        Determine if the palm is open by checking finger extension.
         
         Args:
-            hand_landmarks: MediaPipe hand landmarks for a single hand
+            hand_idx: Hand index (default: 0 for first hand)
+            extension_threshold: Threshold to consider a finger extended
             
         Returns:
-            Boolean indicating if palm is open
+            Boolean indicating if palm is open, and confidence score
         """
-        if not hand_landmarks:
-            return False
+        # Check if we have hand landmarks data
+        if not self.hand_landmarks_data or hand_idx >= len(self.hand_landmarks_data):
+            return False, 0.0
             
-        # MediaPipe landmark indices for fingertips and joints
-        # Format: [tip, pip, mcp] for each finger
-        finger_indices = {
-            'thumb': [4, 3, 2],
-            'index': [8, 6, 5],
-            'middle': [12, 10, 9],
-            'ring': [16, 14, 13],
-            'pinky': [20, 18, 17]
-        }
+        # Get the landmarks for the specified hand
+        hand_landmarks = self.hand_landmarks_data[hand_idx]
         
-        # Check if each finger is extended
-        fingers_extended = {}
+        # Check finger extension
+        extended_fingers = 0
         
-        for finger, (tip_id, pip_id, mcp_id) in finger_indices.items():
-            # Get landmarks
-            tip = hand_landmarks.landmark[tip_id]
-            pip = hand_landmarks.landmark[pip_id]
-            mcp = hand_landmarks.landmark[mcp_id]
+        # MediaPipe hand landmark indices
+        # Wrist: 0
+        # Fingertips: 4 (thumb), 8 (index), 12 (middle), 16 (ring), 20 (pinky)
+        # Knuckles: 5 (index), 9 (middle), 13 (ring), 17 (pinky)
+        
+        # Get coordinates of important landmarks
+        wrist = hand_landmarks.landmark[0]
+        palm_center = hand_landmarks.landmark[9]  # Middle finger knuckle as palm center
+        
+        # Check each finger (excluding thumb which has different mechanics)
+        for finger_idx, tip_idx in enumerate([8, 12, 16, 20]):  # Index, middle, ring, pinky tips
+            knuckle_idx = 5 + (finger_idx * 4)  # 5, 9, 13, 17
             
-            # Special case for thumb due to its different orientation
-            if finger == 'thumb':
-                # For thumb, check if it's pointing away from palm
-                # This is a simplified check - may need adjustment
-                thumb_ip = hand_landmarks.landmark[3]  # IP joint
-                thumb_cmc = hand_landmarks.landmark[1]  # CMC joint
+            fingertip = hand_landmarks.landmark[tip_idx]
+            knuckle = hand_landmarks.landmark[knuckle_idx]
+            
+            # Calculate vectors
+            # Vector from knuckle to palm center
+            v_knuckle_to_palm = np.array([
+                palm_center.x - knuckle.x,
+                palm_center.y - knuckle.y,
+                palm_center.z - knuckle.z
+            ])
+            
+            # Vector from knuckle to fingertip
+            v_knuckle_to_tip = np.array([
+                fingertip.x - knuckle.x,
+                fingertip.y - knuckle.y,
+                fingertip.z - knuckle.z
+            ])
+            
+            # Normalize vectors
+            knuckle_to_palm_length = np.sqrt(np.sum(v_knuckle_to_palm**2))
+            knuckle_to_tip_length = np.sqrt(np.sum(v_knuckle_to_tip**2))
+            
+            if knuckle_to_palm_length > 0 and knuckle_to_tip_length > 0:
+                v_knuckle_to_palm = v_knuckle_to_palm / knuckle_to_palm_length
+                v_knuckle_to_tip = v_knuckle_to_tip / knuckle_to_tip_length
                 
-                # Vector from CMC to IP
-                vec1 = (thumb_ip.x - thumb_cmc.x, thumb_ip.y - thumb_cmc.y, thumb_ip.z - thumb_cmc.z)
-                # Vector from IP to tip
-                vec2 = (tip.x - thumb_ip.x, tip.y - thumb_ip.y, tip.z - thumb_ip.z)
+                # Calculate dot product to determine finger extension
+                # If dot product is negative, finger is pointing away from palm
+                dot_product = np.dot(v_knuckle_to_palm, v_knuckle_to_tip)
                 
-                # Check if these vectors are roughly aligned (dot product > 0)
-                dot_product = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2]
-                fingers_extended['thumb'] = dot_product > 0
-            else:
-                # For other fingers, check if they are extended by comparing
-                # the y coordinates (in image space, lower y is higher up)
-                # and checking straightness
-                
-                # Calculate distance from MCP to fingertip directly
-                direct_dist = np.sqrt(
-                    (tip.x - mcp.x)**2 + 
-                    (tip.y - mcp.y)**2 + 
-                    (tip.z - mcp.z)**2
-                )
-                
-                # Calculate distance along the finger joints
-                joint_dist = np.sqrt(
-                    (pip.x - mcp.x)**2 + 
-                    (pip.y - mcp.y)**2 + 
-                    (pip.z - mcp.z)**2
-                ) + np.sqrt(
-                    (tip.x - pip.x)**2 + 
-                    (tip.y - pip.y)**2 + 
-                    (tip.z - pip.z)**2
-                )
-                
-                # If finger is extended, direct distance will be close to joint distance
-                # If bent, direct distance will be much less
-                straightness = direct_dist / joint_dist if joint_dist > 0 else 0
-                
-                # Consider finger extended if reasonably straight and pointing outward
-                fingers_extended[finger] = (straightness > 0.7 and tip.y < mcp.y)
+                if dot_product < -extension_threshold:  # Negative means pointing away from palm
+                    extended_fingers += 1
         
-        # Palm is considered open if all fingers are extended
-        # Or if at least 4 out of 5 fingers (excluding thumb) are extended
-        num_extended = sum(1 for extended in fingers_extended.values() if extended)
-        return num_extended >= 4  # Allow one finger to be bent
-    
+        # Special case for thumb
+        thumb_tip = hand_landmarks.landmark[4]
+        thumb_base = hand_landmarks.landmark[2]
+        index_base = hand_landmarks.landmark[5]
+        
+        # Calculate vector from thumb base to index base (across palm)
+        v_across_palm = np.array([
+            index_base.x - thumb_base.x,
+            index_base.y - thumb_base.y,
+            index_base.z - thumb_base.z
+        ])
+        
+        # Vector from thumb base to thumb tip
+        v_thumb_base_to_tip = np.array([
+            thumb_tip.x - thumb_base.x,
+            thumb_tip.y - thumb_base.y,
+            thumb_tip.z - thumb_base.z
+        ])
+        
+        # Normalize vectors
+        across_palm_length = np.sqrt(np.sum(v_across_palm**2))
+        thumb_length = np.sqrt(np.sum(v_thumb_base_to_tip**2))
+        
+        if across_palm_length > 0 and thumb_length > 0:
+            v_across_palm = v_across_palm / across_palm_length
+            v_thumb_base_to_tip = v_thumb_base_to_tip / thumb_length
+            
+            # Calculate dot product
+            thumb_dot = np.dot(v_across_palm, v_thumb_base_to_tip)
+            
+            # Thumb is extended if it's pointing perpendicular to or away from the palm
+            if thumb_dot < extension_threshold:
+                extended_fingers += 1
+        
+        # Calculate confidence score (0 to 1)
+        confidence = extended_fingers / 5.0
+        
+        # Consider palm open if majority of fingers are extended
+        is_open = extended_fingers >= 3
+        
+        return is_open, confidence
+
+
     def get_palm_state(self):
         """
         Get the current state of the palm for the most recent frame.
@@ -2440,3 +2551,123 @@ class Camera:
                 y_offset += 25
         
         return frame
+
+    def compute_movement_vector(self, hand_idx=0, frames=10):
+        """
+        Compute the movement vector and velocity from the stored landmark buffer.
+        Uses palm center (landmark 9) as reference point for hand position.
+        
+        Args:
+            hand_idx: Hand index to track
+            frames: Number of frames to analyze (up to buffer size)
+            
+        Returns:
+            Dictionary with movement data
+        """
+        # Palm center is approximated by landmark 9 (middle finger MCP joint)
+        palm_trajectory, timestamps = self.landmark_buffer.get_landmark_sequence(
+            hand_idx=hand_idx, landmark_idx=9)
+        
+        if len(palm_trajectory) < 2:
+            return {
+                "vector": np.zeros(3),
+                "velocity": 0.0,
+                "direction": "none",
+                "displacement": 0.0,
+                "duration": 0.0,
+                "valid": False
+            }
+        
+        # Limit to specified number of frames
+        actual_frames = min(frames, len(palm_trajectory))
+        palm_trajectory = palm_trajectory[-actual_frames:]
+        timestamps = timestamps[-actual_frames:]
+        
+        # Calculate movement vector from oldest to newest position
+        start_position = palm_trajectory[0]
+        end_position = palm_trajectory[-1]
+        
+        # Calculate time duration
+        start_time = timestamps[0]
+        end_time = timestamps[-1]
+        duration = end_time - start_time
+        
+        if duration <= 0.001:  # Avoid division by zero
+            return {
+                "vector": np.zeros(3),
+                "velocity": 0.0,
+                "direction": "none",
+                "displacement": 0.0,
+                "duration": 0.0,
+                "valid": False
+            }
+        
+        # Calculate displacement vector
+        displacement_vector = end_position - start_position
+        
+        # Calculate total displacement (Euclidean distance)
+        displacement = np.linalg.norm(displacement_vector)
+        
+        # Calculate velocity (displacement/time)
+        velocity = displacement / duration
+        
+        # Determine primary direction
+        abs_dx = abs(displacement_vector[0])
+        abs_dy = abs(displacement_vector[1])
+        abs_dz = abs(displacement_vector[2])
+        
+        direction = "none"
+        if abs_dx > abs_dy and abs_dx > abs_dz:
+            direction = "right" if displacement_vector[0] > 0 else "left"
+        elif abs_dy > abs_dx and abs_dy > abs_dz:
+            direction = "down" if displacement_vector[1] > 0 else "up"
+        elif abs_dz > abs_dx and abs_dz > abs_dy:
+            direction = "forward" if displacement_vector[2] > 0 else "backward"
+        
+        return {
+            "vector": displacement_vector,
+            "velocity": velocity,
+            "direction": direction,
+            "displacement": displacement,
+            "duration": duration,
+            "valid": True,
+            "directional_components": {
+                "dx": displacement_vector[0],
+                "dy": displacement_vector[1],
+                "dz": displacement_vector[2]
+            }
+        }
+    
+    def detect_swipe_gesture(self, min_velocity=0.3, min_displacement=0.08, hand_idx=0):
+        """
+        Detect swipe gestures based on palm movement.
+        
+        Args:
+            min_velocity: Minimum velocity to consider as a swipe
+            min_displacement: Minimum displacement to consider as a swipe
+            hand_idx: Hand index to track
+            
+        Returns:
+            Detected swipe direction or None
+        """
+        # First check if palm is open
+        is_palm_open, confidence = self.is_palm_open(hand_idx=hand_idx)
+        
+        if not is_palm_open or confidence < 0.7:
+            return None
+        
+        # Compute movement
+        movement = self.compute_movement_vector(hand_idx=hand_idx)
+        
+        if not movement["valid"]:
+            return None
+        
+        # Check if movement exceeds thresholds
+        if movement["velocity"] < min_velocity or movement["displacement"] < min_displacement:
+            return None
+        
+        # Map direction to swipe
+        if movement["direction"] in ["left", "right", "up", "down"]:
+            return f"swipe_{movement['direction']}"
+        
+        return None
