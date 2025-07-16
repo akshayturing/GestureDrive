@@ -2332,115 +2332,166 @@ class Camera:
     #     num_extended = sum(1 for extended in fingers_extended.values() if extended)
     #     return num_extended >= 4  # Allow one finger to be bent
     
-    def is_palm_open(self, hand_idx=0, extension_threshold=0.5):
-        """
-        Determine if the palm is open by checking finger extension.
+    # def is_palm_open(self, hand_idx=0, extension_threshold=0.5):
+    #     """
+    #     Determine if the palm is open by checking finger extension.
         
-        Args:
-            hand_idx: Hand index (default: 0 for first hand)
-            extension_threshold: Threshold to consider a finger extended
+    #     Args:
+    #         hand_idx: Hand index (default: 0 for first hand)
+    #         extension_threshold: Threshold to consider a finger extended
             
-        Returns:
-            Boolean indicating if palm is open, and confidence score
+    #     Returns:
+    #         Boolean indicating if palm is open, and confidence score
+    #     """
+    #     # Check if we have hand landmarks data
+    #     if not self.hand_landmarks_data or hand_idx >= len(self.hand_landmarks_data):
+    #         return False, 0.0
+            
+    #     # Get the landmarks for the specified hand
+    #     hand_landmarks = self.hand_landmarks_data[hand_idx]
+        
+    #     # Check finger extension
+    #     extended_fingers = 0
+        
+    #     # MediaPipe hand landmark indices
+    #     # Wrist: 0
+    #     # Fingertips: 4 (thumb), 8 (index), 12 (middle), 16 (ring), 20 (pinky)
+    #     # Knuckles: 5 (index), 9 (middle), 13 (ring), 17 (pinky)
+        
+    #     # Get coordinates of important landmarks
+    #     wrist = hand_landmarks.landmark[0]
+    #     palm_center = hand_landmarks.landmark[9]  # Middle finger knuckle as palm center
+        
+    #     # Check each finger (excluding thumb which has different mechanics)
+    #     for finger_idx, tip_idx in enumerate([8, 12, 16, 20]):  # Index, middle, ring, pinky tips
+    #         knuckle_idx = 5 + (finger_idx * 4)  # 5, 9, 13, 17
+            
+    #         fingertip = hand_landmarks.landmark[tip_idx]
+    #         knuckle = hand_landmarks.landmark[knuckle_idx]
+            
+    #         # Calculate vectors
+    #         # Vector from knuckle to palm center
+    #         v_knuckle_to_palm = np.array([
+    #             palm_center.x - knuckle.x,
+    #             palm_center.y - knuckle.y,
+    #             palm_center.z - knuckle.z
+    #         ])
+            
+    #         # Vector from knuckle to fingertip
+    #         v_knuckle_to_tip = np.array([
+    #             fingertip.x - knuckle.x,
+    #             fingertip.y - knuckle.y,
+    #             fingertip.z - knuckle.z
+    #         ])
+            
+    #         # Normalize vectors
+    #         knuckle_to_palm_length = np.sqrt(np.sum(v_knuckle_to_palm**2))
+    #         knuckle_to_tip_length = np.sqrt(np.sum(v_knuckle_to_tip**2))
+            
+    #         if knuckle_to_palm_length > 0 and knuckle_to_tip_length > 0:
+    #             v_knuckle_to_palm = v_knuckle_to_palm / knuckle_to_palm_length
+    #             v_knuckle_to_tip = v_knuckle_to_tip / knuckle_to_tip_length
+                
+    #             # Calculate dot product to determine finger extension
+    #             # If dot product is negative, finger is pointing away from palm
+    #             dot_product = np.dot(v_knuckle_to_palm, v_knuckle_to_tip)
+                
+    #             if dot_product < -extension_threshold:  # Negative means pointing away from palm
+    #                 extended_fingers += 1
+        
+    #     # Special case for thumb
+    #     thumb_tip = hand_landmarks.landmark[4]
+    #     thumb_base = hand_landmarks.landmark[2]
+    #     index_base = hand_landmarks.landmark[5]
+        
+    #     # Calculate vector from thumb base to index base (across palm)
+    #     v_across_palm = np.array([
+    #         index_base.x - thumb_base.x,
+    #         index_base.y - thumb_base.y,
+    #         index_base.z - thumb_base.z
+    #     ])
+        
+    #     # Vector from thumb base to thumb tip
+    #     v_thumb_base_to_tip = np.array([
+    #         thumb_tip.x - thumb_base.x,
+    #         thumb_tip.y - thumb_base.y,
+    #         thumb_tip.z - thumb_base.z
+    #     ])
+        
+    #     # Normalize vectors
+    #     across_palm_length = np.sqrt(np.sum(v_across_palm**2))
+    #     thumb_length = np.sqrt(np.sum(v_thumb_base_to_tip**2))
+        
+    #     if across_palm_length > 0 and thumb_length > 0:
+    #         v_across_palm = v_across_palm / across_palm_length
+    #         v_thumb_base_to_tip = v_thumb_base_to_tip / thumb_length
+            
+    #         # Calculate dot product
+    #         thumb_dot = np.dot(v_across_palm, v_thumb_base_to_tip)
+            
+    #         # Thumb is extended if it's pointing perpendicular to or away from the palm
+    #         if thumb_dot < extension_threshold:
+    #             extended_fingers += 1
+        
+    #     # Calculate confidence score (0 to 1)
+    #     confidence = extended_fingers / 5.0
+        
+    #     # Consider palm open if majority of fingers are extended
+    #     is_open = extended_fingers >= 3
+        
+    #     return is_open, confidence
+
+    def is_palm_open(self, hand_idx=0, extension_threshold=0.04):
         """
-        # Check if we have hand landmarks data
+        Determine if the palm is open by checking finger extension based on fingertip-to-knuckle distances.
+
+        Args:
+            hand_idx: Index of the hand (default is 0 for first hand)
+            extension_threshold: Minimum distance to consider a finger extended
+
+        Returns:
+            Tuple (is_open: bool, confidence: float)
+        """
+
         if not self.hand_landmarks_data or hand_idx >= len(self.hand_landmarks_data):
             return False, 0.0
-            
-        # Get the landmarks for the specified hand
+
         hand_landmarks = self.hand_landmarks_data[hand_idx]
-        
-        # Check finger extension
         extended_fingers = 0
-        
-        # MediaPipe hand landmark indices
-        # Wrist: 0
-        # Fingertips: 4 (thumb), 8 (index), 12 (middle), 16 (ring), 20 (pinky)
-        # Knuckles: 5 (index), 9 (middle), 13 (ring), 17 (pinky)
-        
-        # Get coordinates of important landmarks
-        wrist = hand_landmarks.landmark[0]
-        palm_center = hand_landmarks.landmark[9]  # Middle finger knuckle as palm center
-        
-        # Check each finger (excluding thumb which has different mechanics)
-        for finger_idx, tip_idx in enumerate([8, 12, 16, 20]):  # Index, middle, ring, pinky tips
-            knuckle_idx = 5 + (finger_idx * 4)  # 5, 9, 13, 17
-            
-            fingertip = hand_landmarks.landmark[tip_idx]
+
+        # Helper function for distance check
+        def is_finger_extended(tip_idx, knuckle_idx, threshold):
+            tip = hand_landmarks.landmark[tip_idx]
             knuckle = hand_landmarks.landmark[knuckle_idx]
-            
-            # Calculate vectors
-            # Vector from knuckle to palm center
-            v_knuckle_to_palm = np.array([
-                palm_center.x - knuckle.x,
-                palm_center.y - knuckle.y,
-                palm_center.z - knuckle.z
+            distance = np.linalg.norm([
+                tip.x - knuckle.x,
+                tip.y - knuckle.y,
+                tip.z - knuckle.z
             ])
-            
-            # Vector from knuckle to fingertip
-            v_knuckle_to_tip = np.array([
-                fingertip.x - knuckle.x,
-                fingertip.y - knuckle.y,
-                fingertip.z - knuckle.z
-            ])
-            
-            # Normalize vectors
-            knuckle_to_palm_length = np.sqrt(np.sum(v_knuckle_to_palm**2))
-            knuckle_to_tip_length = np.sqrt(np.sum(v_knuckle_to_tip**2))
-            
-            if knuckle_to_palm_length > 0 and knuckle_to_tip_length > 0:
-                v_knuckle_to_palm = v_knuckle_to_palm / knuckle_to_palm_length
-                v_knuckle_to_tip = v_knuckle_to_tip / knuckle_to_tip_length
-                
-                # Calculate dot product to determine finger extension
-                # If dot product is negative, finger is pointing away from palm
-                dot_product = np.dot(v_knuckle_to_palm, v_knuckle_to_tip)
-                
-                if dot_product < -extension_threshold:  # Negative means pointing away from palm
-                    extended_fingers += 1
-        
-        # Special case for thumb
+            return distance > threshold
+
+        # Check index, middle, ring, and pinky fingers
+        for finger_idx, tip_idx in enumerate([8, 12, 16, 20]):  # Fingertips
+            knuckle_idx = 5 + finger_idx * 4  # Knuckles: 5, 9, 13, 17
+            if is_finger_extended(tip_idx, knuckle_idx, extension_threshold):
+                extended_fingers += 1
+
+        # Check thumb separately (tip: 4, base: 2), compare to index base (5)
         thumb_tip = hand_landmarks.landmark[4]
         thumb_base = hand_landmarks.landmark[2]
         index_base = hand_landmarks.landmark[5]
-        
-        # Calculate vector from thumb base to index base (across palm)
-        v_across_palm = np.array([
-            index_base.x - thumb_base.x,
-            index_base.y - thumb_base.y,
-            index_base.z - thumb_base.z
+        thumb_distance = np.linalg.norm([
+            thumb_tip.x - index_base.x,
+            thumb_tip.y - index_base.y,
+            thumb_tip.z - index_base.z
         ])
-        
-        # Vector from thumb base to thumb tip
-        v_thumb_base_to_tip = np.array([
-            thumb_tip.x - thumb_base.x,
-            thumb_tip.y - thumb_base.y,
-            thumb_tip.z - thumb_base.z
-        ])
-        
-        # Normalize vectors
-        across_palm_length = np.sqrt(np.sum(v_across_palm**2))
-        thumb_length = np.sqrt(np.sum(v_thumb_base_to_tip**2))
-        
-        if across_palm_length > 0 and thumb_length > 0:
-            v_across_palm = v_across_palm / across_palm_length
-            v_thumb_base_to_tip = v_thumb_base_to_tip / thumb_length
-            
-            # Calculate dot product
-            thumb_dot = np.dot(v_across_palm, v_thumb_base_to_tip)
-            
-            # Thumb is extended if it's pointing perpendicular to or away from the palm
-            if thumb_dot < extension_threshold:
-                extended_fingers += 1
-        
-        # Calculate confidence score (0 to 1)
-        confidence = extended_fingers / 5.0
-        
-        # Consider palm open if majority of fingers are extended
-        is_open = extended_fingers >= 3
-        
-        return is_open, confidence
+        if thumb_distance > extension_threshold:
+            extended_fingers += 1
 
+        confidence = extended_fingers / 5.0
+        is_open = extended_fingers >= 3  # Majority of fingers extended
+
+        return is_open, confidence
 
     def get_palm_state(self):
         """

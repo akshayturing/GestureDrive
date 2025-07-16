@@ -83,7 +83,7 @@ def main():
                 # Check palm state
                 
                 
-                is_palm_open, confidence = camera.is_palm_open()
+                is_palm_open, confidence = camera.is_palm_open(hand_idx=0)
     
                 palm_status = f"Palm: {'Open' if is_palm_open else 'Closed'} ({confidence:.2f})"
                 palm_color = (0, 255, 0) if is_palm_open else (0, 0, 255)
