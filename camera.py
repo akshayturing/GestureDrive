@@ -2248,3 +2248,195 @@ class Camera:
             Array of landmark positions and timestamps
         """
         return self.landmark_buffer.get_landmark_sequence(hand_idx, landmark_idx)
+    
+    def is_palm_open(self, hand_landmarks):
+        """
+        Determine if the palm is open (all fingers extended).
+        
+        Args:
+            hand_landmarks: MediaPipe hand landmarks for a single hand
+            
+        Returns:
+            Boolean indicating if palm is open
+        """
+        if not hand_landmarks:
+            return False
+            
+        # MediaPipe landmark indices for fingertips and joints
+        # Format: [tip, pip, mcp] for each finger
+        finger_indices = {
+            'thumb': [4, 3, 2],
+            'index': [8, 6, 5],
+            'middle': [12, 10, 9],
+            'ring': [16, 14, 13],
+            'pinky': [20, 18, 17]
+        }
+        
+        # Check if each finger is extended
+        fingers_extended = {}
+        
+        for finger, (tip_id, pip_id, mcp_id) in finger_indices.items():
+            # Get landmarks
+            tip = hand_landmarks.landmark[tip_id]
+            pip = hand_landmarks.landmark[pip_id]
+            mcp = hand_landmarks.landmark[mcp_id]
+            
+            # Special case for thumb due to its different orientation
+            if finger == 'thumb':
+                # For thumb, check if it's pointing away from palm
+                # This is a simplified check - may need adjustment
+                thumb_ip = hand_landmarks.landmark[3]  # IP joint
+                thumb_cmc = hand_landmarks.landmark[1]  # CMC joint
+                
+                # Vector from CMC to IP
+                vec1 = (thumb_ip.x - thumb_cmc.x, thumb_ip.y - thumb_cmc.y, thumb_ip.z - thumb_cmc.z)
+                # Vector from IP to tip
+                vec2 = (tip.x - thumb_ip.x, tip.y - thumb_ip.y, tip.z - thumb_ip.z)
+                
+                # Check if these vectors are roughly aligned (dot product > 0)
+                dot_product = vec1[0]*vec2[0] + vec1[1]*vec2[1] + vec1[2]*vec2[2]
+                fingers_extended['thumb'] = dot_product > 0
+            else:
+                # For other fingers, check if they are extended by comparing
+                # the y coordinates (in image space, lower y is higher up)
+                # and checking straightness
+                
+                # Calculate distance from MCP to fingertip directly
+                direct_dist = np.sqrt(
+                    (tip.x - mcp.x)**2 + 
+                    (tip.y - mcp.y)**2 + 
+                    (tip.z - mcp.z)**2
+                )
+                
+                # Calculate distance along the finger joints
+                joint_dist = np.sqrt(
+                    (pip.x - mcp.x)**2 + 
+                    (pip.y - mcp.y)**2 + 
+                    (pip.z - mcp.z)**2
+                ) + np.sqrt(
+                    (tip.x - pip.x)**2 + 
+                    (tip.y - pip.y)**2 + 
+                    (tip.z - pip.z)**2
+                )
+                
+                # If finger is extended, direct distance will be close to joint distance
+                # If bent, direct distance will be much less
+                straightness = direct_dist / joint_dist if joint_dist > 0 else 0
+                
+                # Consider finger extended if reasonably straight and pointing outward
+                fingers_extended[finger] = (straightness > 0.7 and tip.y < mcp.y)
+        
+        # Palm is considered open if all fingers are extended
+        # Or if at least 4 out of 5 fingers (excluding thumb) are extended
+        num_extended = sum(1 for extended in fingers_extended.values() if extended)
+        return num_extended >= 4  # Allow one finger to be bent
+    
+    def get_palm_state(self):
+        """
+        Get the current state of the palm for the most recent frame.
+        
+        Returns:
+            Dict with palm state information
+        """
+        if not self.hand_landmarks_data or not self.hand_landmarks_data[0]:
+            return {"palm_open": False, "reason": "No hand detected"}
+            
+        # Check palm state for the first detected hand
+        palm_open = self.is_palm_open(self.hand_landmarks_data[0])
+        
+        if palm_open:
+            return {"palm_open": True, "reason": "Palm is open"}
+        else:
+            return {"palm_open": False, "reason": "Palm is closed or fingers are bent"}
+    
+    def detect_whole_hand_gesture(self, hand_idx=0, displacement_threshold=0.03, 
+                                 velocity_threshold=0.2):
+        """
+        Detect gestures based on whole hand movement, requiring:
+        1. All fingers to show consistent motion
+        2. Palm to be in open state
+        
+        Args:
+            hand_idx: Hand index to track (default: 0 for first hand)
+            displacement_threshold: Minimum displacement for significant movement
+            velocity_threshold: Minimum velocity to trigger a gesture detection
+            
+        Returns:
+            Detected gesture name or None
+        """
+        # First, check if palm is open - no gesture detection if palm is closed
+        if not self.hand_landmarks_data:
+            return None
+            
+        palm_state = self.get_palm_state()
+        if not palm_state["palm_open"]:
+            # Palm is not open, no gesture detection
+            return None
+        
+        # If palm is open, proceed with whole hand motion analysis
+        motion = self.get_whole_hand_motion(
+            hand_idx=hand_idx, 
+            displacement_threshold=displacement_threshold
+        )
+        
+        # Only report valid whole-hand movements with sufficient velocity
+        if motion["valid"] and motion["velocity"] > velocity_threshold:
+            return f"hand_{motion['direction']}"
+        
+        return None
+    
+    def visualize_hand_motion(self, frame, hand_idx=0):
+        """
+        Visualize hand motion status on the frame, now including palm state.
+        
+        Args:
+            frame: OpenCV frame to draw on
+            hand_idx: Hand index to analyze
+            
+        Returns:
+            Annotated frame
+        """
+        # First check palm state
+        palm_state = self.get_palm_state()
+        
+        # Draw palm state
+        if palm_state["palm_open"]:
+            cv2.putText(frame, "Palm: OPEN - Gesture detection active", 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        else:
+            cv2.putText(frame, f"Palm: CLOSED - Gesture detection disabled ({palm_state['reason']})", 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            # If palm is closed, don't proceed with motion analysis
+            return frame
+        
+        # Get whole hand motion (only proceed if palm is open)
+        motion = self.get_whole_hand_motion(hand_idx=hand_idx)
+        
+        # Draw the analysis results
+        if motion["valid"]:
+            # Valid motion detected
+            color = (0, 255, 0)  # Green for valid motion
+            status = f"Hand Direction: {motion['direction']} ({motion['velocity']:.2f})"
+        else:
+            # Invalid or insufficient motion
+            color = (0, 0, 255)  # Red for invalid motion
+            if "reason" in motion:
+                status = f"Status: {motion['reason']}"
+            else:
+                status = "Status: Unknown issue"
+        
+        # Draw status text
+        cv2.putText(frame, status, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        
+        # Draw individual finger statuses if available
+        if "finger_displacements" in motion:
+            y_offset = 120
+            for finger, displacement in motion["finger_displacements"].items():
+                is_moving = displacement >= 0.03  # Use the same threshold
+                finger_status = f"{finger}: {'Moving' if is_moving else 'Stable'} ({displacement:.4f})"
+                finger_color = (0, 255, 0) if is_moving else (0, 165, 255)  # Green if moving, orange if stable
+                cv2.putText(frame, finger_status, (10, y_offset), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, finger_color, 1)
+                y_offset += 25
+        
+        return frame

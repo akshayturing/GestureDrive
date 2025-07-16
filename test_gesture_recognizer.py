@@ -157,22 +157,30 @@ def main():
                     cv2.putText(frame, f"Static Gesture: {gesture}", (10, 30), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
                 
-                # Apply whole-hand motion detection with refined criteria
-                hand_gesture = camera.detect_whole_hand_gesture(
-                    displacement_threshold=0.03,  # Adjust based on testing
-                    velocity_threshold=0.2       # Adjust based on testing
-                )
+                # Check palm state and apply whole-hand motion detection only if palm is open
+                palm_state = camera.get_palm_state()
                 
-                # Visualize hand motion status
+                # Visualize hand motion status with palm state check
                 frame = camera.visualize_hand_motion(frame)
                 
-                # Display detected whole-hand gesture
-                if hand_gesture:
-                    cv2.putText(frame, f"Dynamic Gesture: {hand_gesture}", 
-                               (10, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                # Dynamic gesture detection - only performed when palm is open
+                if palm_state["palm_open"]:
+                    hand_gesture = camera.detect_whole_hand_gesture(
+                        displacement_threshold=0.03,
+                        velocity_threshold=0.2
+                    )
+                    
+                    # Display detected whole-hand gesture
+                    if hand_gesture:
+                        cv2.putText(frame, f"Dynamic Gesture: {hand_gesture}", 
+                                   (10, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                else:
+                    # Palm is closed - no gesture detection
+                    cv2.putText(frame, "Dynamic Gesture: Disabled - Open palm to enable", 
+                               (10, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             
             # Display the frame
-            cv2.imshow('GestureDrive - Refined Motion Detection', frame)
+            cv2.imshow('GestureDrive - Palm State Validation', frame)
             
             # Exit on 'q' key press
             if cv2.waitKey(1) & 0xFF == ord('q'):
