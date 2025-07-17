@@ -7,9 +7,9 @@ def run_all_tests():
     """Run all unit tests."""
     # Get all test modules
     test_modules = [
-        #'test_directory_state_manager',
+        'test_directory_state_manager',
         'test_gesture_detection',
-        #'test_persistent_navigator'
+        'test_persistent_navigator'
     ]
     
     # Create test suite

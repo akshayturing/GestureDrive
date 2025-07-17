@@ -198,16 +198,145 @@ class PersistentGestureNavigator:
         self.last_gesture_time = time.time()
         return gesture
     
+    # def _recognize_gesture(self):
+    #     """
+    #     Analyze motion path to recognize gesture.
+        
+    #     Returns:
+    #         Gesture type or None
+    #     """
+    #     # Get first and last point
+    #     first_point, first_time = self.gesture_path[0]
+    #     last_point, last_time = self.gesture_path[-1]
+        
+    #     # Calculate displacement
+    #     dx = last_point[0] - first_point[0]
+    #     dy = last_point[1] - first_point[1]
+        
+    #     # Calculate time and distance
+    #     dt = last_time - first_time
+    #     distance = math.sqrt(dx*dx + dy*dy)
+        
+    #     # Minimum thresholds
+    #     min_distance = 0.15
+    #     min_velocity = 0.5
+        
+    #     # Check if gesture meets minimum requirements
+    #     if dt <= 0 or distance < min_distance or distance/dt < min_velocity:
+    #         return None
+            
+    #     # Determine primary direction
+    #     if abs(dx) > abs(dy):
+    #         # Horizontal swipe
+    #         if dx > 0:
+    #             return "swipe_right"
+    #         else:
+    #             return "swipe_left"
+    #     else:
+    #         # Vertical swipe
+    #         if dy > 0:
+    #             return "swipe_down"
+    #         else:
+    #             return "swipe_up"
+    # def _recognize_gesture(self):
+    #     """
+    #     Analyze motion path to recognize deliberate gestures.
+        
+    #     Returns:
+    #         Gesture type or None
+    #     """
+    #     # At least 6 points needed for reliable gesture recognition (reduced from 10)
+    #     if len(self.gesture_path) < 6:
+    #         return None
+            
+    #     # Filter the path to include only the active portion (skip idle start/end)
+    #     active_path = self._extract_active_movement(self.gesture_path)
+        
+    #     # Need enough points in active path
+    #     if len(active_path) < 5:  # Reduced from 8
+    #         return None
+            
+    #     # Get first and last point of active movement
+    #     first_point, first_time = active_path[0]
+    #     last_point, last_time = active_path[-1]
+        
+    #     # Calculate displacement
+    #     dx = last_point[0] - first_point[0]
+    #     dy = last_point[1] - first_point[1]
+        
+    #     # Calculate time and distance
+    #     dt = last_time - first_time
+    #     if dt <= 0:
+    #         return None
+            
+    #     distance = math.sqrt(dx*dx + dy*dy)
+        
+    #     # Calculate velocity
+    #     velocity = distance / dt
+        
+    #     # Minimum thresholds - more lenient
+    #     min_distance = 0.12  # Reduced from 0.15
+    #     min_velocity = 0.4   # Reduced from 0.5
+        
+    #     # Debug logging
+    #     if self.debug_mode:
+    #         print(f"Gesture analysis: distance={distance:.3f}, velocity={velocity:.3f}, dt={dt:.3f}s")
+        
+    #     # Check if gesture meets minimum requirements
+    #     if distance < min_distance or velocity < min_velocity:
+    #         return None
+            
+    #     # Calculate straightness (ratio of direct distance to path length)
+    #     path_length = self._calculate_path_length(active_path)
+    #     straightness = distance / path_length if path_length > 0 else 0
+        
+    #     # Require relatively straight movement for gesture detection
+    #     # More lenient straightness threshold
+    #     if straightness < 0.65:  # Reduced from 0.7
+    #         return None
+        
+    #     # Movement is significant enough to be a gesture, now determine direction
+    #     abs_dx = abs(dx)
+    #     abs_dy = abs(dy)
+        
+    #     # Ensure a clear primary direction with higher contrast threshold
+    #     if abs_dx > abs_dy * 1.2:  # 20% difference to be considered primarily horizontal
+    #         # Horizontal swipe
+    #         if dx > 0:
+    #             return "swipe_right"
+    #         else:
+    #             return "swipe_left"
+    #     elif abs_dy > abs_dx * 1.2:  # 20% difference to be considered primarily vertical
+    #         # Vertical swipe
+    #         if dy > 0:
+    #             return "swipe_down"
+    #         else:
+    #             return "swipe_up"
+    #     else:
+    #         # Diagonal movement - not a clear direction
+    #         return None
     def _recognize_gesture(self):
         """
-        Analyze motion path to recognize gesture.
+        Analyze motion path to recognize deliberate gestures.
         
         Returns:
             Gesture type or None
         """
-        # Get first and last point
-        first_point, first_time = self.gesture_path[0]
-        last_point, last_time = self.gesture_path[-1]
+        
+        # At least 10 points needed for reliable gesture recognition
+        if len(self.gesture_path) < 8:  # Reduced from 10 to improve detection
+            return None
+            
+        # Filter the path to include only the active portion (skip idle start/end)
+        active_path = self._extract_active_movement(self.gesture_path)
+        
+        # Need enough points in active path
+        if len(active_path) < 5:  # Reduced from 8 to improve detection
+            return None
+        
+        # Get first and last point of active movement
+        first_point, first_time = active_path[0]
+        last_point, last_time = active_path[-1]
         
         # Calculate displacement
         dx = last_point[0] - first_point[0]
@@ -215,30 +344,67 @@ class PersistentGestureNavigator:
         
         # Calculate time and distance
         dt = last_time - first_time
+        if dt <= 0.001:  # Avoid division by very small time
+            return None
+            
         distance = math.sqrt(dx*dx + dy*dy)
         
-        # Minimum thresholds
+        # Minimum thresholds - adjusted to be more sensitive
         min_distance = 0.15
         min_velocity = 0.5
         
+        # Calculate velocity
+        velocity = distance / dt
+        
         # Check if gesture meets minimum requirements
-        if dt <= 0 or distance < min_distance or distance/dt < min_velocity:
+        if distance < min_distance or velocity < min_velocity:
+            return None
+        
+        # Calculate straightness (ratio of direct distance to path length)
+        path_length = self._calculate_path_length(active_path)
+        if path_length < 0.001:  # Avoid division by very small path length
             return None
             
-        # Determine primary direction
-        if abs(dx) > abs(dy):
+        straightness = distance / path_length
+        
+        # Relaxed straightness requirement for better detection
+        if straightness < 0.6:  # Reduced from 0.7
+            return None
+            
+        # Prioritize stronger axis for more accurate detection
+        dx_abs = abs(dx)
+        dy_abs = abs(dy)
+        
+        # Calculate how much stronger the primary axis is
+        axis_ratio = max(dx_abs, dy_abs) / (min(dx_abs, dy_abs) + 0.001)
+        
+        # For ambiguous movements, require stronger preference for one axis
+        min_ratio = 1.3  # Ratio between primary and secondary axis
+        
+        if dx_abs > dy_abs and axis_ratio >= min_ratio:
             # Horizontal swipe
             if dx > 0:
                 return "swipe_right"
             else:
                 return "swipe_left"
-        else:
+        elif dy_abs > dx_abs and axis_ratio >= min_ratio:
             # Vertical swipe
             if dy > 0:
                 return "swipe_down"
             else:
                 return "swipe_up"
-    
+        elif dx_abs > dy_abs:
+            # Weaker horizontal preference
+            if dx > 0:
+                return "swipe_right"
+            else:
+                return "swipe_left"
+        else:
+            # Weaker vertical preference
+            if dy > 0:
+                return "swipe_down"
+            else:
+                return "swipe_up"
     # def _execute_gesture_action(self, gesture):
     #     """
     #     Execute file system action based on gesture.
@@ -936,8 +1102,73 @@ class PersistentGestureNavigator:
         # Hand is considered idle if max displacement is below threshold
         return max_displacement < position_threshold
 
+    # def _has_deliberate_movement(self, trajectory, min_consistent_direction=3, 
+    #                             directional_threshold=0.7, min_velocity=0.05):
+    #     """
+    #     Determine if there is deliberate movement in a specific direction.
+        
+    #     Args:
+    #         trajectory: List of (position, timestamp) tuples
+    #         min_consistent_direction: Minimum consecutive points with consistent direction
+    #         directional_threshold: Cosine similarity threshold for consistent direction
+    #         min_velocity: Minimum velocity to consider movement as deliberate
+            
+    #     Returns:
+    #         Boolean indicating if movement appears deliberate
+    #     """
+    #     if len(trajectory) < min_consistent_direction + 1:
+    #         return False
+            
+    #     # Calculate segment directions and velocities
+    #     segment_dirs = []
+    #     segment_velocities = []
+        
+    #     for i in range(1, len(trajectory)):
+    #         p1, t1 = trajectory[i-1]
+    #         p2, t2 = trajectory[i]
+            
+    #         # Time difference between points
+    #         dt = t2 - t1
+    #         if dt <= 0:
+    #             continue
+                
+    #         # Movement vector
+    #         dx = p2[0] - p1[0]
+    #         dy = p2[1] - p1[1]
+            
+    #         # Normalize to get direction
+    #         mag = math.sqrt(dx*dx + dy*dy)
+    #         if mag > 0:
+    #             dir_x, dir_y = dx/mag, dy/mag
+    #             segment_dirs.append((dir_x, dir_y))
+    #             segment_velocities.append(mag/dt)
+    #         else:
+    #             segment_dirs.append((0, 0))
+    #             segment_velocities.append(0)
+        
+    #     # Check for consistent direction over several consecutive segments
+    #     consistent_count = 0
+    #     max_consistent = 0
+        
+    #     for i in range(1, len(segment_dirs)):
+    #         d1_x, d1_y = segment_dirs[i-1]
+    #         d2_x, d2_y = segment_dirs[i]
+            
+    #         # Calculate cosine similarity between consecutive directions
+    #         dot_product = d1_x * d2_x + d1_y * d2_y
+            
+    #         if dot_product > directional_threshold and segment_velocities[i] >= min_velocity:
+    #             consistent_count += 1
+    #         else:
+    #             consistent_count = 0
+                
+    #         max_consistent = max(max_consistent, consistent_count)
+        
+    #     # Movement is deliberate if we have enough consecutive segments in a consistent direction
+    #     # with sufficient velocity
+    #     return max_consistent >= min_consistent_direction - 1
     def _has_deliberate_movement(self, trajectory, min_consistent_direction=3, 
-                                directional_threshold=0.7, min_velocity=0.05):
+                           directional_threshold=0.7, min_velocity=0.15):  # Increased from 0.05
         """
         Determine if there is deliberate movement in a specific direction.
         
@@ -991,17 +1222,26 @@ class PersistentGestureNavigator:
             # Calculate cosine similarity between consecutive directions
             dot_product = d1_x * d2_x + d1_y * d2_y
             
-            if dot_product > directional_threshold and segment_velocities[i] >= min_velocity:
+            # Consider both direction consistency AND velocity
+            velocity_ok = segment_velocities[i] >= min_velocity
+            direction_ok = dot_product > directional_threshold
+            
+            if direction_ok and velocity_ok:
                 consistent_count += 1
             else:
-                consistent_count = 0
+                # Only reset consistency count if velocity is sufficient
+                # This prevents slow movements from breaking consistency
+                if velocity_ok:
+                    consistent_count = 0
                 
             max_consistent = max(max_consistent, consistent_count)
         
+        # Also check average velocity across entire trajectory
+        avg_velocity = sum(segment_velocities) / len(segment_velocities) if segment_velocities else 0
+        
         # Movement is deliberate if we have enough consecutive segments in a consistent direction
-        # with sufficient velocity
-        return max_consistent >= min_consistent_direction - 1
-
+        # AND the average velocity exceeds our threshold
+        return max_consistent >= min_consistent_direction - 1 and avg_velocity >= min_velocity
     def start_tracking_landmark(self, hand_landmark):
         """
         Start tracking a hand landmark, but don't immediately assume it's a gesture.
@@ -1028,6 +1268,82 @@ class PersistentGestureNavigator:
         self.gesture_state = self.GESTURE_STATE_POTENTIAL
         self.potential_start_time = current_time
 
+    # def update_landmark_tracking(self, hand_landmark):
+    #     """
+    #     Update the landmark tracking and analyze motion to determine gesture state.
+        
+    #     Args:
+    #         hand_landmark: Current hand landmark
+    #     """
+    #     if not self.tracking_active:
+    #         return
+            
+    #     current_time = time.time()
+        
+    #     # Extract position
+    #     position = (hand_landmark.x, hand_landmark.y, hand_landmark.z)
+        
+    #     # Add to path
+    #     self.gesture_path.append((position, current_time))
+        
+    #     # Limit path length to prevent memory buildup
+    #     max_path_length = 30
+    #     if len(self.gesture_path) > max_path_length:
+    #         self.gesture_path = self.gesture_path[-max_path_length:]
+        
+    #     # Periodically check for idle state
+    #     if current_time - self.last_idle_check >= self.idle_check_interval:
+    #         is_idle = self._is_hand_idle(self.gesture_path)
+    #         has_deliberate_movement = self._has_deliberate_movement(self.gesture_path)
+    #         self.last_idle_check = current_time
+            
+    #         # State machine transitions
+    #         if self.gesture_state == self.GESTURE_STATE_POTENTIAL:
+    #             if has_deliberate_movement:
+    #                 # Transition to active gesture state
+    #                 self.gesture_state = self.GESTURE_STATE_ACTIVE
+    #                 self.idle_confirmation_count = 0
+    #             elif is_idle:
+    #                 self.idle_confirmation_count += 1
+    #                 if self.idle_confirmation_count >= self.required_idle_confirmations:
+    #                     # If hand has been idle for enough confirmations, reset to idle
+    #                     self.gesture_state = self.GESTURE_STATE_IDLE
+    #                     self.idle_confirmation_count = 0
+    #             elif current_time - self.potential_start_time > self.idle_potential_timeout:
+    #                 # If potential state times out without becoming active, reset
+    #                 self.gesture_state = self.GESTURE_STATE_IDLE
+                    
+    #         elif self.gesture_state == self.GESTURE_STATE_ACTIVE:
+    #             if is_idle:
+    #                 self.idle_confirmation_count += 1
+    #                 if self.idle_confirmation_count >= self.required_idle_confirmations:
+    #                     # If hand becomes idle after active movement, try to recognize the gesture
+    #                     gesture = self._recognize_gesture()
+    #                     if gesture:
+    #                         self._execute_gesture_action(gesture)
+    #                         self.last_recognized_gesture = gesture
+    #                         self.last_gesture_time = current_time
+    #                         self.gesture_state = self.GESTURE_STATE_RECOGNIZED
+    #                     else:
+    #                         # No recognizable gesture
+    #                         self.gesture_state = self.GESTURE_STATE_IDLE
+    #                     self.idle_confirmation_count = 0
+    #             else:
+    #                 self.idle_confirmation_count = 0
+                    
+    #         elif self.gesture_state == self.GESTURE_STATE_RECOGNIZED:
+    #             # After recognition, wait until we're sure the hand is idle before allowing new gestures
+    #             if is_idle:
+    #                 self.idle_confirmation_count += 1
+    #                 if self.idle_confirmation_count >= self.required_idle_confirmations:
+    #                     self.gesture_state = self.GESTURE_STATE_IDLE
+    #                     self.idle_confirmation_count = 0
+    #             else:
+    #                 self.idle_confirmation_count = 0
+        
+    #     # Check for continuous movement for scrolling when in idle state
+    #     if self.gesture_state == self.GESTURE_STATE_IDLE:
+    #         self.check_vertical_movement(hand_landmark)
     def update_landmark_tracking(self, hand_landmark):
         """
         Update the landmark tracking and analyze motion to determine gesture state.
@@ -1057,39 +1373,71 @@ class PersistentGestureNavigator:
             has_deliberate_movement = self._has_deliberate_movement(self.gesture_path)
             self.last_idle_check = current_time
             
+            # Debug logging
+            if self.debug_mode:
+                print(f"State: {self.gesture_state}, Idle: {is_idle}, "+
+                    f"Deliberate: {has_deliberate_movement}, "+
+                    f"Idle count: {self.idle_confirmation_count}")
+            
             # State machine transitions
             if self.gesture_state == self.GESTURE_STATE_POTENTIAL:
                 if has_deliberate_movement:
                     # Transition to active gesture state
                     self.gesture_state = self.GESTURE_STATE_ACTIVE
                     self.idle_confirmation_count = 0
+                    if self.debug_mode:
+                        print("Transition: POTENTIAL -> ACTIVE (deliberate movement detected)")
                 elif is_idle:
                     self.idle_confirmation_count += 1
                     if self.idle_confirmation_count >= self.required_idle_confirmations:
                         # If hand has been idle for enough confirmations, reset to idle
                         self.gesture_state = self.GESTURE_STATE_IDLE
                         self.idle_confirmation_count = 0
+                        if self.debug_mode:
+                            print("Transition: POTENTIAL -> IDLE (remained idle)")
                 elif current_time - self.potential_start_time > self.idle_potential_timeout:
                     # If potential state times out without becoming active, reset
                     self.gesture_state = self.GESTURE_STATE_IDLE
+                    if self.debug_mode:
+                        print("Transition: POTENTIAL -> IDLE (timed out)")
                     
             elif self.gesture_state == self.GESTURE_STATE_ACTIVE:
+                # **FIX**: First check for a recognizable gesture when movement stops
                 if is_idle:
                     self.idle_confirmation_count += 1
                     if self.idle_confirmation_count >= self.required_idle_confirmations:
-                        # If hand becomes idle after active movement, try to recognize the gesture
+                        # Try to recognize the gesture
                         gesture = self._recognize_gesture()
                         if gesture:
+                            # Gesture recognized - execute and transition to RECOGNIZED
+                            if self.debug_mode:
+                                print(f"Gesture recognized: {gesture}")
                             self._execute_gesture_action(gesture)
                             self.last_recognized_gesture = gesture
                             self.last_gesture_time = current_time
                             self.gesture_state = self.GESTURE_STATE_RECOGNIZED
+                            if self.debug_mode:
+                                print("Transition: ACTIVE -> RECOGNIZED")
                         else:
-                            # No recognizable gesture
+                            # No recognizable gesture - back to idle
                             self.gesture_state = self.GESTURE_STATE_IDLE
+                            if self.debug_mode:
+                                print("Transition: ACTIVE -> IDLE (no gesture recognized)")
                         self.idle_confirmation_count = 0
-                else:
-                    self.idle_confirmation_count = 0
+                # **FIX**: Only try gesture recognition if movement has been occurring long enough
+                elif current_time - self.potential_start_time > 0.5:  # At least 0.5s of movement
+                    # Even if still moving, try to recognize if we've been in ACTIVE state for a while
+                    gesture = self._recognize_gesture()
+                    if gesture:
+                        self._execute_gesture_action(gesture)
+                        self.last_recognized_gesture = gesture
+                        self.last_gesture_time = current_time
+                        self.gesture_state = self.GESTURE_STATE_RECOGNIZED
+                        self.idle_confirmation_count = 0
+                        if self.debug_mode:
+                            print(f"Transition: ACTIVE -> RECOGNIZED (mid-movement, gesture={gesture})")
+                    else:
+                        self.idle_confirmation_count = 0
                     
             elif self.gesture_state == self.GESTURE_STATE_RECOGNIZED:
                 # After recognition, wait until we're sure the hand is idle before allowing new gestures
@@ -1098,6 +1446,8 @@ class PersistentGestureNavigator:
                     if self.idle_confirmation_count >= self.required_idle_confirmations:
                         self.gesture_state = self.GESTURE_STATE_IDLE
                         self.idle_confirmation_count = 0
+                        if self.debug_mode:
+                            print("Transition: RECOGNIZED -> IDLE")
                 else:
                     self.idle_confirmation_count = 0
         
@@ -1123,66 +1473,66 @@ class PersistentGestureNavigator:
         self.tracking_active = False
         self.gesture_state = self.GESTURE_STATE_IDLE
         self.idle_confirmation_count = 0
-    def _recognize_gesture(self):
-        """
-        Analyze motion path to recognize deliberate gestures.
+    # def _recognize_gesture(self):
+    #     """
+    #     Analyze motion path to recognize deliberate gestures.
         
-        Returns:
-            Gesture type or None
-        """
-        # At least 10 points needed for reliable gesture recognition
-        if len(self.gesture_path) < 10:
-            return None
+    #     Returns:
+    #         Gesture type or None
+    #     """
+    #     # At least 10 points needed for reliable gesture recognition
+    #     if len(self.gesture_path) < 10:
+    #         return None
             
-        # Filter the path to include only the active portion (skip idle start/end)
-        active_path = self._extract_active_movement(self.gesture_path)
+    #     # Filter the path to include only the active portion (skip idle start/end)
+    #     active_path = self._extract_active_movement(self.gesture_path)
         
-        # Need enough points in active path
-        if len(active_path) < 8:
-            return None
+    #     # Need enough points in active path
+    #     if len(active_path) < 8:
+    #         return None
             
-        # Get first and last point of active movement
-        first_point, first_time = active_path[0]
-        last_point, last_time = active_path[-1]
+    #     # Get first and last point of active movement
+    #     first_point, first_time = active_path[0]
+    #     last_point, last_time = active_path[-1]
         
-        # Calculate displacement
-        dx = last_point[0] - first_point[0]
-        dy = last_point[1] - first_point[1]
+    #     # Calculate displacement
+    #     dx = last_point[0] - first_point[0]
+    #     dy = last_point[1] - first_point[1]
         
-        # Calculate time and distance
-        dt = last_time - first_time
-        distance = math.sqrt(dx*dx + dy*dy)
+    #     # Calculate time and distance
+    #     dt = last_time - first_time
+    #     distance = math.sqrt(dx*dx + dy*dy)
         
-        # Minimum thresholds
-        min_distance = 0.15
-        min_velocity = 0.5
+    #     # Minimum thresholds
+    #     min_distance = 0.15
+    #     min_velocity = 0.5
         
-        # Check if gesture meets minimum requirements
-        if dt <= 0 or distance < min_distance or distance/dt < min_velocity:
-            return None
+    #     # Check if gesture meets minimum requirements
+    #     if dt <= 0 or distance < min_distance or distance/dt < min_velocity:
+    #         return None
             
-        # Calculate straightness (ratio of direct distance to path length)
-        path_length = self._calculate_path_length(active_path)
-        straightness = distance / path_length if path_length > 0 else 0
+    #     # Calculate straightness (ratio of direct distance to path length)
+    #     path_length = self._calculate_path_length(active_path)
+    #     straightness = distance / path_length if path_length > 0 else 0
         
-        # Require relatively straight movement for gesture detection
-        if straightness < 0.7:  # At least 70% straight
-            return None
+    #     # Require relatively straight movement for gesture detection
+    #     if straightness < 0.7:  # At least 70% straight
+    #         return None
             
-        # Determine primary direction
-        if abs(dx) > abs(dy):
-            # Horizontal swipe
-            if dx > 0:
-                return "swipe_right"
-            else:
-                return "swipe_left"
-        else:
-            # Vertical swipe
-            if dy > 0:
-                return "swipe_down"
-            else:
-                return "swipe_up"
-
+    #     # Determine primary direction
+    #     if abs(dx) > abs(dy):
+    #         # Horizontal swipe
+    #         if dx > 0:
+    #             return "swipe_right"
+    #         else:
+    #             return "swipe_left"
+    #     else:
+    #         # Vertical swipe
+    #         if dy > 0:
+    #             return "swipe_down"
+    #         else:
+    #             return "swipe_up"
+   
     def _extract_active_movement(self, trajectory):
         """
         Extract the portion of the trajectory that represents active movement,
