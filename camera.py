@@ -2690,6 +2690,7 @@ class Camera:
         }
     
     def detect_swipe_gesture(self, min_velocity=0.3, min_displacement=0.08, hand_idx=0):
+
         """
         Detect swipe gestures based on palm movement.
         
@@ -2722,3 +2723,4 @@ class Camera:
             return f"swipe_{movement['direction']}"
         
         return None
+    
