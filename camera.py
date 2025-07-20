@@ -1928,14 +1928,88 @@ class Camera:
             # Slight sleep to reduce CPU usage
             time.sleep(0.01)
     
+    # def _process_frame(self, frame):
+    #     """Process frame to detect hands and draw landmarks"""
+    #     # Convert BGR to RGB for MediaPipe (MediaPipe requires RGB input)
+    #     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+    #     # Process the RGB frame with MediaPipe
+    #     results = self.hands.process(rgb_frame)
+        
+    #     current_time = time.time()
+        
+    #     # Process gestures if hands are detected
+    #     if results.multi_hand_landmarks and len(results.multi_hand_landmarks) > 0:
+    #         # Add landmarks to the tracker
+    #         self.landmark_tracker.add_landmarks(results.multi_hand_landmarks)
+            
+    #         # Get the primary hand landmarks
+    #         primary_hand_landmarks = results.multi_hand_landmarks[0].landmark
+            
+    #         # Static gesture processing (using your existing gesture recognizer)
+    #         # This code depends on your existing implementation...
+            
+    #         # Motion gesture processing with validation
+    #         if current_time - self.last_gesture_time > self.gesture_cooldown:
+    #             # Detect and validate motion gestures
+    #             motion, is_validated = self.landmark_tracker.detect_motion_gesture(
+    #                 landmarks=primary_hand_landmarks,
+    #                 threshold=self.motion_threshold,
+    #                 confidence_threshold=self.confidence_threshold,
+    #                 current_time=current_time
+    #             )
+                
+    #             # Update gesture state
+    #             if motion not in ['stationary', 'insufficient_data', 'invalid_posture']:
+    #                 self.raw_motion = motion
+                    
+    #                 # Store validated gesture
+    #                 if is_validated:
+    #                     self.validated_motion = motion
+    #                     self.last_gesture_time = current_time
+    #                     self.logger.info(f"Validated motion gesture: {motion}")
+        
+    #     # Show validation debug info if enabled
+    #     if self.show_validation_status and frame is not None:
+    #         self._draw_validation_info(frame)
+            
+    #    # Store the hand landmarks data for external use
+    #     self.hand_landmarks_data = results.multi_hand_landmarks
+        
+    #     # Add landmarks to the buffer with current timestamp - NEW ADDITION
+    #     if results.multi_hand_landmarks:
+    #         self.landmark_buffer.add_frame(results.multi_hand_landmarks)
+        
+    #     # Create a copy of the frame to draw on
+    #     annotated_frame = frame.copy()
+        
+    #     # Draw FPS information
+    #     cv2.putText(annotated_frame, f"FPS: {self.fps:.1f}", (10, 30), 
+    #                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+    #     # Draw hand landmarks if detected and if showing landmarks is enabled
+    #     if self.show_landmarks and results.multi_hand_landmarks:
+    #         for hand_landmarks in results.multi_hand_landmarks:
+    #             self.mp_drawing.draw_landmarks(
+    #                 annotated_frame,
+    #                 hand_landmarks,
+    #                 self.mp_hands.HAND_CONNECTIONS,
+    #                 self.mp_drawing_styles.get_default_hand_landmarks_style(),
+    #                 self.mp_drawing_styles.get_default_hand_connections_style()
+    #             )
+                
+    #     return annotated_frame
+
     def _process_frame(self, frame):
-        """Process frame to detect hands and draw landmarks"""
-        # Convert BGR to RGB for MediaPipe (MediaPipe requires RGB input)
+        """Process frame to detect hands and filter gestures"""
+        # Your existing frame processing code...
+            # Convert BGR to RGB for MediaPipe (MediaPipe requires RGB input)
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # Process the RGB frame with MediaPipe
+        # Process the frame with MediaPipe
         results = self.hands.process(rgb_frame)
         
+        # Get the current time
         current_time = time.time()
         
         # Process gestures if hands are detected
@@ -1946,10 +2020,7 @@ class Camera:
             # Get the primary hand landmarks
             primary_hand_landmarks = results.multi_hand_landmarks[0].landmark
             
-            # Static gesture processing (using your existing gesture recognizer)
-            # This code depends on your existing implementation...
-            
-            # Motion gesture processing with validation
+            # Motion gesture processing with enhanced filtering
             if current_time - self.last_gesture_time > self.gesture_cooldown:
                 # Detect and validate motion gestures
                 motion, is_validated = self.landmark_tracker.detect_motion_gesture(
@@ -1959,15 +2030,24 @@ class Camera:
                     current_time=current_time
                 )
                 
-                # Update gesture state
-                if motion not in ['stationary', 'insufficient_data', 'invalid_posture']:
+                # Get current hand state for UI feedback
+                hand_state = self.landmark_tracker.current_hand_state
+                
+                # Update gesture state based on filtering
+                if motion not in ['stationary', 'insufficient_data', 'invalid_posture', 'transitioning', 'unclear_direction']:
+                    # Store the detected motion for display
                     self.raw_motion = motion
                     
-                    # Store validated gesture
+                    # Only update validated motion if it passes all filters
                     if is_validated:
                         self.validated_motion = motion
                         self.last_gesture_time = current_time
-                        self.logger.info(f"Validated motion gesture: {motion}")
+                        self.logger.info(f"Validated deliberate motion: {motion}")
+        
+        # Show validation and filtering debug info if enabled
+        if self.show_validation_status and frame is not None:
+            self._draw_validation_info(frame)
+            
         
         # Show validation debug info if enabled
         if self.show_validation_status and frame is not None:
@@ -2821,37 +2901,86 @@ class Camera:
         self.show_validation_status = not self.show_validation_status
         return self.show_validation_status
     
+    # def _draw_validation_info(self, frame):
+    #     """Draw validation information on frame for debugging"""
+    #     # Get debug info from tracker
+    #     debug_info = self.landmark_tracker.get_debug_info()
+        
+    #     # Set text properties
+    #     font = cv2.FONT_HERSHEY_SIMPLEX
+    #     font_scale = 0.6
+    #     thickness = 1
+    #     padding = 10
+    #     line_height = 25
+        
+    #     # Background rectangle
+    #     overlay = frame.copy()
+    #     cv2.rectangle(overlay, (10, 10), (350, 170), (0, 0, 0), -1)
+    #     cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+        
+    #     # Draw text lines
+    #     lines = [
+    #         f"Raw motion: {self.raw_motion or 'None'}",
+    #         f"Validated: {self.validated_motion or 'None'}",
+    #         f"Duration: {debug_info['tracking_duration']:.2f}s / {self.landmark_tracker.min_gesture_duration:.2f}s",
+    #         f"Posture: {'Valid' if debug_info['posture_valid'] else 'Invalid'}",
+    #         f"Reason: {debug_info['validation_reason']}"
+    #     ]
+        
+    #     y = 30
+    #     for line in lines:
+    #         cv2.putText(frame, line, (padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    #         y += line_height
+
     def _draw_validation_info(self, frame):
-        """Draw validation information on frame for debugging"""
+        """Draw enhanced validation information on frame for debugging"""
         # Get debug info from tracker
         debug_info = self.landmark_tracker.get_debug_info()
         
         # Set text properties
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
+        font_scale = 0.5
         thickness = 1
         padding = 10
         line_height = 25
         
         # Background rectangle
         overlay = frame.copy()
-        cv2.rectangle(overlay, (10, 10), (350, 170), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+        cv2.rectangle(overlay, (10, 10), (400, 230), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+        
+        # Color coding based on hand state
+        color_map = {
+            "UNKNOWN": (128, 128, 128),  # Gray
+            "IDLE": (255, 0, 0),         # Blue
+            "TRANSITIONING": (0, 165, 255), # Orange
+            "DELIBERATE": (0, 255, 0)    # Green
+        }
+        state_color = color_map.get(debug_info["hand_state"], (255, 255, 255))
         
         # Draw text lines
         lines = [
+            f"Hand state: {debug_info['hand_state']}",
             f"Raw motion: {self.raw_motion or 'None'}",
             f"Validated: {self.validated_motion or 'None'}",
-            f"Duration: {debug_info['tracking_duration']:.2f}s / {self.landmark_tracker.min_gesture_duration:.2f}s",
             f"Posture: {'Valid' if debug_info['posture_valid'] else 'Invalid'}",
+            f"Velocity: {debug_info['avg_velocity']:.3f}",
+            f"Motion consistency: {debug_info['motion_consistency']:.2f}",
+            f"Direction consistency: {debug_info.get('direction_consistency', 0):.2f}",
+            f"Duration: {debug_info['tracking_duration']:.2f}s / {self.landmark_tracker.min_gesture_duration:.2f}s",
             f"Reason: {debug_info['validation_reason']}"
         ]
         
-        y = 30
-        for line in lines:
+        y = 35
+        # First draw hand state with special highlighting
+        cv2.putText(frame, f"Hand state: {debug_info['hand_state']}", 
+                    (padding, y), font, font_scale, state_color, thickness, cv2.LINE_AA)
+        y += line_height
+        
+        # Then draw the rest of the lines
+        for line in lines[1:]:
             cv2.putText(frame, line, (padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
             y += line_height
-
     def get_processed_frame(self):
         """
         Get the latest processed frame in a thread-safe manner.
