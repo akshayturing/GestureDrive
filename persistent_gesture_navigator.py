@@ -27,7 +27,8 @@ class PersistentGestureNavigator:
         """
         # Store camera instance
         self.camera = camera_instance
-        
+        self.debug_mode = False
+        self.IMAGE_DIMENSIONS = (640, 480) 
         # Initialize the directory state manager
         self.state_manager = DirectoryStateManager(
             auto_save=True,
@@ -200,62 +201,23 @@ class PersistentGestureNavigator:
     
     # def _recognize_gesture(self):
     #     """
-    #     Analyze motion path to recognize gesture.
-        
-    #     Returns:
-    #         Gesture type or None
-    #     """
-    #     # Get first and last point
-    #     first_point, first_time = self.gesture_path[0]
-    #     last_point, last_time = self.gesture_path[-1]
-        
-    #     # Calculate displacement
-    #     dx = last_point[0] - first_point[0]
-    #     dy = last_point[1] - first_point[1]
-        
-    #     # Calculate time and distance
-    #     dt = last_time - first_time
-    #     distance = math.sqrt(dx*dx + dy*dy)
-        
-    #     # Minimum thresholds
-    #     min_distance = 0.15
-    #     min_velocity = 0.5
-        
-    #     # Check if gesture meets minimum requirements
-    #     if dt <= 0 or distance < min_distance or distance/dt < min_velocity:
-    #         return None
-            
-    #     # Determine primary direction
-    #     if abs(dx) > abs(dy):
-    #         # Horizontal swipe
-    #         if dx > 0:
-    #             return "swipe_right"
-    #         else:
-    #             return "swipe_left"
-    #     else:
-    #         # Vertical swipe
-    #         if dy > 0:
-    #             return "swipe_down"
-    #         else:
-    #             return "swipe_up"
-    # def _recognize_gesture(self):
-    #     """
     #     Analyze motion path to recognize deliberate gestures.
         
     #     Returns:
     #         Gesture type or None
     #     """
-    #     # At least 6 points needed for reliable gesture recognition (reduced from 10)
-    #     if len(self.gesture_path) < 6:
+        
+    #     # At least 10 points needed for reliable gesture recognition
+    #     if len(self.gesture_path) < 8:  # Reduced from 10 to improve detection
     #         return None
             
     #     # Filter the path to include only the active portion (skip idle start/end)
     #     active_path = self._extract_active_movement(self.gesture_path)
         
     #     # Need enough points in active path
-    #     if len(active_path) < 5:  # Reduced from 8
+    #     if len(active_path) < 5:  # Reduced from 8 to improve detection
     #         return None
-            
+        
     #     # Get first and last point of active movement
     #     first_point, first_time = active_path[0]
     #     last_point, last_time = active_path[-1]
@@ -266,55 +228,115 @@ class PersistentGestureNavigator:
         
     #     # Calculate time and distance
     #     dt = last_time - first_time
-    #     if dt <= 0:
+    #     if dt <= 0.001:  # Avoid division by very small time
     #         return None
             
     #     distance = math.sqrt(dx*dx + dy*dy)
         
+    #     # Minimum thresholds - adjusted to be more sensitive
+    #     min_distance = 0.15
+    #     min_velocity = 0.5
+        
     #     # Calculate velocity
     #     velocity = distance / dt
-        
-    #     # Minimum thresholds - more lenient
-    #     min_distance = 0.12  # Reduced from 0.15
-    #     min_velocity = 0.4   # Reduced from 0.5
-        
-    #     # Debug logging
-    #     if self.debug_mode:
-    #         print(f"Gesture analysis: distance={distance:.3f}, velocity={velocity:.3f}, dt={dt:.3f}s")
         
     #     # Check if gesture meets minimum requirements
     #     if distance < min_distance or velocity < min_velocity:
     #         return None
-            
+        
     #     # Calculate straightness (ratio of direct distance to path length)
     #     path_length = self._calculate_path_length(active_path)
-    #     straightness = distance / path_length if path_length > 0 else 0
-        
-    #     # Require relatively straight movement for gesture detection
-    #     # More lenient straightness threshold
-    #     if straightness < 0.65:  # Reduced from 0.7
+    #     if path_length < 0.001:  # Avoid division by very small path length
     #         return None
+            
+    #     straightness = distance / path_length
         
-    #     # Movement is significant enough to be a gesture, now determine direction
-    #     abs_dx = abs(dx)
-    #     abs_dy = abs(dy)
+    #     # Relaxed straightness requirement for better detection
+    #     if straightness < 0.6:  # Reduced from 0.7
+    #         return None
+            
+    #     # Prioritize stronger axis for more accurate detection
+    #     dx_abs = abs(dx)
+    #     dy_abs = abs(dy)
         
-    #     # Ensure a clear primary direction with higher contrast threshold
-    #     if abs_dx > abs_dy * 1.2:  # 20% difference to be considered primarily horizontal
+    #     # Calculate how much stronger the primary axis is
+    #     axis_ratio = max(dx_abs, dy_abs) / (min(dx_abs, dy_abs) + 0.001)
+        
+    #     # For ambiguous movements, require stronger preference for one axis
+    #     min_ratio = 1.3  # Ratio between primary and secondary axis
+        
+    #     if dx_abs > dy_abs and axis_ratio >= min_ratio:
     #         # Horizontal swipe
     #         if dx > 0:
     #             return "swipe_right"
     #         else:
     #             return "swipe_left"
-    #     elif abs_dy > abs_dx * 1.2:  # 20% difference to be considered primarily vertical
+    #     elif dy_abs > dx_abs and axis_ratio >= min_ratio:
     #         # Vertical swipe
     #         if dy > 0:
     #             return "swipe_down"
     #         else:
     #             return "swipe_up"
+    #     elif dx_abs > dy_abs:
+    #         # Weaker horizontal preference
+    #         if dx > 0:
+    #             return "swipe_right"
+    #         else:
+    #             return "swipe_left"
     #     else:
-    #         # Diagonal movement - not a clear direction
-    #         return None
+    #         # Weaker vertical preference
+    #         if dy > 0:
+    #             return "swipe_down"
+    #         else:
+    #             return "swipe_up"
+    
+    # def _execute_gesture_action(self, gesture):
+    #     """
+    #     Execute file system action based on gesture.
+        
+    #     Args:
+    #         gesture: The recognized gesture
+            
+    #     Returns:
+    #         Success status and message
+    #     """
+    #     result = False
+    #     message = ""
+        
+    #     if gesture == "swipe_left":
+    #         # Go back in history
+    #         result = self.state_manager.navigate_history(forward=False)
+    #         message = "Navigated back" if result else "No previous directory"
+            
+    #     elif gesture == "swipe_right":
+    #         # Enter selected directory
+    #         selected = self.get_selected_item()
+    #         if selected and selected['is_dir']:
+    #             result = self.state_manager.change_directory(selected['path'])
+    #             message = f"Entered directory: {Path(selected['path']).name}" if result else f"Failed to enter {Path(selected['path']).name}"
+    #         else:
+    #             message = "Cannot enter: Not a directory or no item selected"
+                
+    #     elif gesture == "swipe_up":
+    #         # Navigate to parent directory
+    #         result = self.state_manager.navigate_up()
+    #         message = f"Navigated to parent: {self.state_manager.get_current_directory().name}" if result else "Already at root directory"
+            
+    #     elif gesture == "swipe_down":
+    #         # Select next item (scroll down)
+    #         result = self.select_next()
+    #         selected = self.get_selected_item()
+    #         message = f"Selected: {selected['name']}" if selected else "No items to select"
+        
+    #     # Update our local state from the persistent state
+    #     if result and (gesture == "swipe_left" or gesture == "swipe_right" or gesture == "swipe_up"):
+    #         self._update_from_state()
+            
+    #     # Show status message
+    #     self.show_status(message, 2.0)
+        
+    #     return result
+    
     def _recognize_gesture(self):
         """
         Analyze motion path to recognize deliberate gestures.
@@ -323,15 +345,15 @@ class PersistentGestureNavigator:
             Gesture type or None
         """
         
-        # At least 10 points needed for reliable gesture recognition
-        if len(self.gesture_path) < 8:  # Reduced from 10 to improve detection
+        # At least 8 points needed for reliable gesture recognition
+        if len(self.gesture_path) < 8:
             return None
             
         # Filter the path to include only the active portion (skip idle start/end)
         active_path = self._extract_active_movement(self.gesture_path)
         
         # Need enough points in active path
-        if len(active_path) < 5:  # Reduced from 8 to improve detection
+        if len(active_path) < 5:
             return None
         
         # Get first and last point of active movement
@@ -367,8 +389,8 @@ class PersistentGestureNavigator:
             
         straightness = distance / path_length
         
-        # Relaxed straightness requirement for better detection
-        if straightness < 0.6:  # Reduced from 0.7
+        # Gesture must be reasonably straight
+        if straightness < 0.65:
             return None
             
         # Prioritize stronger axis for more accurate detection
@@ -405,49 +427,6 @@ class PersistentGestureNavigator:
                 return "swipe_down"
             else:
                 return "swipe_up"
-    # def _execute_gesture_action(self, gesture):
-    #     """
-    #     Execute file system action based on gesture.
-        
-    #     Args:
-    #         gesture: The recognized gesture
-    #     """
-    #     result = False
-    #     message = ""
-        
-    #     if gesture == "swipe_left":
-    #         # Navigate back
-    #         result = self.state_manager.navigate_history(forward=False)
-    #         message = "Navigated to previous directory" if result else "No previous directory"
-            
-    #     elif gesture == "swipe_right":
-    #         # Navigate forward
-    #         result = self.state_manager.navigate_history(forward=True)
-    #         message = "Navigated to next directory" if result else "No next directory"
-            
-    #     elif gesture == "swipe_up":
-    #         # Navigate to parent directory
-    #         result = self.state_manager.navigate_up()
-    #         message = f"Navigated to parent: {self.state_manager.get_current_directory().name}" if result else "Already at root directory"
-            
-    #     elif gesture == "swipe_down":
-    #         # Open selected directory
-    #         selected = self.get_selected_item()
-    #         if selected and selected['is_dir']:
-    #             result = self.state_manager.change_directory(selected['path'])
-    #             message = f"Entered directory: {Path(selected['path']).name}" if result else f"Failed to enter {Path(selected['path']).name}"
-    #         else:
-    #             message = "Cannot enter: Not a directory or no item selected"
-        
-    #     # Update our local state from the persistent state
-    #     if result:
-    #         self._update_from_state()
-            
-    #     # Show status message
-    #     self.show_status(message, 2.0)
-        
-    #     return result
-    
     def _execute_gesture_action(self, gesture):
         """
         Execute file system action based on gesture.
@@ -462,12 +441,12 @@ class PersistentGestureNavigator:
         message = ""
         
         if gesture == "swipe_left":
-            # Go back in history
+            # Move to previous directory
             result = self.state_manager.navigate_history(forward=False)
-            message = "Navigated back" if result else "No previous directory"
+            message = "Navigated to previous directory" if result else "No previous directory"
             
         elif gesture == "swipe_right":
-            # Enter selected directory
+            # Enter currently selected folder
             selected = self.get_selected_item()
             if selected and selected['is_dir']:
                 result = self.state_manager.change_directory(selected['path'])
@@ -476,24 +455,26 @@ class PersistentGestureNavigator:
                 message = "Cannot enter: Not a directory or no item selected"
                 
         elif gesture == "swipe_up":
-            # Navigate to parent directory
-            result = self.state_manager.navigate_up()
-            message = f"Navigated to parent: {self.state_manager.get_current_directory().name}" if result else "Already at root directory"
+            # Scroll up in the file list
+            result = self.select_previous()
+            selected = self.get_selected_item()
+            message = f"Selected: {selected['name']}" if selected else "No items to select"
             
         elif gesture == "swipe_down":
-            # Select next item (scroll down)
+            # Scroll down in the file list
             result = self.select_next()
             selected = self.get_selected_item()
             message = f"Selected: {selected['name']}" if selected else "No items to select"
         
         # Update our local state from the persistent state
-        if result and (gesture == "swipe_left" or gesture == "swipe_right" or gesture == "swipe_up"):
+        if result and (gesture == "swipe_left" or gesture == "swipe_right"):
             self._update_from_state()
             
         # Show status message
         self.show_status(message, 2.0)
         
         return result
+
     def select_next(self):
         """Select the next item in the directory."""
         if not self.current_items:
@@ -556,56 +537,7 @@ class PersistentGestureNavigator:
         """
         self.status_message = message
         self.message_timeout = time.time() + duration
-    # def update(self):
-    #     """
-    #     Update the navigator state.
-        
-    #     Returns:
-    #         Current state information dictionary
-    #     """
-    #     # Check for external file system changes
-    #     self.check_for_updates()
-        
-    #     # Process hand landmarks if available
-    #     landmarks_data = self.camera.hand_landmarks_data
-    #     if landmarks_data and len(landmarks_data) > 0:
-    #         # Use the first hand's index finger tip (landmark 8)
-    #         hand_landmarks = landmarks_data[0]
-    #         if len(hand_landmarks.landmark) > 8:
-    #             # Get index fingertip
-    #             landmark = hand_landmarks.landmark[8]
-                
-    #             if not self.tracking_active:
-    #                 # Initialize gesture tracking variables if needed
-    #                 if not hasattr(self, 'last_scroll_time'):
-    #                     self.last_scroll_time = 0
-    #                 self.start_gesture(landmark)
-    #             else:
-    #                 # Check for continuous movement for scrolling when gesture is held
-    #                 self.check_vertical_movement(landmark)
-                    
-    #                 # Update gesture for recognition
-    #                 self.update_gesture(landmark)
-    #     elif self.tracking_active:
-    #         # No hand visible, end any active gesture
-    #         self.end_gesture()
-            
-    #     # Clear expired status message
-    #     if time.time() > self.message_timeout:
-    #         self.status_message = "Ready for gesture commands"
-            
-    #     # Return current state
-    #     return {
-    #         'current_directory': str(self.current_directory),
-    #         'items': self.current_items,
-    #         'selected_index': self.selected_index,
-    #         'selected_item': self.get_selected_item(),
-    #         'tracking_active': self.tracking_active,
-    #         'status_message': self.status_message,
-    #         'gesture_path': self.gesture_path.copy() if self.tracking_active else [],
-    #         'history': self.state_manager.get_history(),
-    #         'history_position': self.state_manager.get_history_position(),
-    #     }
+
     
     def update(self):
         """
@@ -654,6 +586,51 @@ class PersistentGestureNavigator:
             'history': self.state_manager.get_history(),
             'history_position': self.state_manager.get_history_position(),
         }
+    # def draw_gesture_feedback(self, frame, gesture=None):
+    #     """
+    #     Draw visual feedback for the current or recent gesture.
+        
+    #     Args:
+    #         frame: Video frame to draw on
+    #         gesture: Current gesture or None
+    #     """
+    #     if not gesture and hasattr(self, 'last_recognized_gesture'):
+    #         gesture = self.last_recognized_gesture
+        
+    #     if not gesture or time.time() - self.last_gesture_time > 1.5:
+    #         return frame
+            
+    #     h, w = frame.shape[:2]
+        
+    #     # Position for gesture indicator
+    #     x, y = 100, 100
+    #     size = 60
+    #     thickness = 2
+    #     color = (0, 255, 0)  # Green
+        
+    #     # Draw different arrows based on gesture
+    #     if gesture == "swipe_left":
+    #         # Left arrow
+    #         cv2.arrowedLine(frame, (x + size, y), (x, y), color, thickness, tipLength=0.3)
+    #         cv2.putText(frame, "BACK", (x - 20, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            
+    #     elif gesture == "swipe_right":
+    #         # Right arrow
+    #         cv2.arrowedLine(frame, (x, y), (x + size, y), color, thickness, tipLength=0.3)
+    #         cv2.putText(frame, "ENTER", (x - 20, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            
+    #     elif gesture == "swipe_up":
+    #         # Up arrow
+    #         cv2.arrowedLine(frame, (x, y + size), (x, y), color, thickness, tipLength=0.3)
+    #         cv2.putText(frame, "PARENT", (x - 30, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            
+    #     elif gesture == "swipe_down":
+    #         # Down arrow
+    #         cv2.arrowedLine(frame, (x, y), (x, y + size), color, thickness, tipLength=0.3)
+    #         cv2.putText(frame, "NEXT", (x - 20, y + 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        
+    #     return frame
+
     def draw_gesture_feedback(self, frame, gesture=None):
         """
         Draw visual feedback for the current or recent gesture.
@@ -678,132 +655,27 @@ class PersistentGestureNavigator:
         
         # Draw different arrows based on gesture
         if gesture == "swipe_left":
-            # Left arrow
+            # Left arrow - Previous Directory
             cv2.arrowedLine(frame, (x + size, y), (x, y), color, thickness, tipLength=0.3)
             cv2.putText(frame, "BACK", (x - 20, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             
         elif gesture == "swipe_right":
-            # Right arrow
+            # Right arrow - Enter Folder
             cv2.arrowedLine(frame, (x, y), (x + size, y), color, thickness, tipLength=0.3)
             cv2.putText(frame, "ENTER", (x - 20, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             
         elif gesture == "swipe_up":
-            # Up arrow
+            # Up arrow - Scroll Up
             cv2.arrowedLine(frame, (x, y + size), (x, y), color, thickness, tipLength=0.3)
-            cv2.putText(frame, "PARENT", (x - 30, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            cv2.putText(frame, "UP", (x - 10, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             
         elif gesture == "swipe_down":
-            # Down arrow
+            # Down arrow - Scroll Down
             cv2.arrowedLine(frame, (x, y), (x, y + size), color, thickness, tipLength=0.3)
-            cv2.putText(frame, "NEXT", (x - 20, y + 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            cv2.putText(frame, "DOWN", (x - 20, y + 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         
         return frame
-    # def draw_ui(self, frame):
-    #     """
-    #     Draw the UI on the frame.
-        
-    #     Args:
-    #         frame: Video frame to draw on
-            
-    #     Returns:
-    #         Frame with UI elements added
-    #     """
-    #     h, w = frame.shape[:2]
-        
-    #     # Draw directory panel
-    #     panel_width = 300
-    #     panel_x = w - panel_width
-        
-    #     # Draw background panel
-    #     cv2.rectangle(frame, (panel_x, 0), (w, h), (40, 40, 40), -1)
-        
-    #     # Draw current directory
-    #     font = cv2.FONT_HERSHEY_SIMPLEX
-    #     curr_dir_name = self.current_directory.name or "/"
-    #     parent_dir_name = self.current_directory.parent.name or "/"
-        
-    #     cv2.putText(frame, "Current:", (panel_x + 10, 25), font, 0.5, (150, 150, 150), 1)
-    #     cv2.putText(frame, curr_dir_name, (panel_x + 10, 50), font, 0.7, (255, 255, 255), 1)
-        
-    #     cv2.putText(frame, "Parent:", (panel_x + 10, 75), font, 0.5, (150, 150, 150), 1)
-    #     cv2.putText(frame, parent_dir_name, (panel_x + 10, 100), font, 0.6, (200, 200, 200), 1)
-        
-    #     # Draw separator line
-    #     cv2.line(frame, (panel_x, 110), (w, 110), (70, 70, 70), 1)
-        
-    #     # Draw file list with scroll if needed
-    #     list_y_start = 130
-    #     list_y_end = h - 120
-    #     item_height = 25
-        
-    #     # Calculate visible range
-    #     visible_count = (list_y_end - list_y_start) // item_height
-    #     total_items = len(self.current_items)
-        
-    #     # Calculate starting index for scrolling
-    #     if total_items <= visible_count:
-    #         start_idx = 0
-    #     else:
-    #         # Ensure selected item is visible
-    #         middle = visible_count // 2
-    #         start_idx = max(0, min(self.selected_index - middle, total_items - visible_count))
-            
-    #     # Draw items
-    #     for i in range(start_idx, min(start_idx + visible_count, total_items)):
-    #         item = self.current_items[i]
-    #         y_pos = list_y_start + (i - start_idx) * item_height
-            
-    #         # Highlight selected item
-    #         if i == self.selected_index:
-    #             cv2.rectangle(frame, (panel_x, y_pos - 12), (w, y_pos + 12), (60, 100, 60), -1)
-                
-    #         # Draw icon based on type
-    #         icon = "📁 " if item['is_dir'] else "📄 "
-    #         name = item['name']
-    #         if len(name) > 20:  # Truncate long names
-    #             name = name[:17] + "..."
-                
-    #         text_color = (255, 255, 255) if i == self.selected_index else (200, 200, 200)
-    #         cv2.putText(frame, icon + name, (panel_x + 15, y_pos), font, 0.55, text_color, 1)
-            
-    #     # Draw scroll indicators if needed
-    #     if start_idx > 0:
-    #         cv2.putText(frame, "▲", (w - 20, list_y_start - 5), font, 0.7, (150, 150, 150), 1)
-            
-    #     if start_idx + visible_count < total_items:
-    #         cv2.putText(frame, "▼", (w - 20, list_y_end + 5), font, 0.7, (150, 150, 150), 1)
-            
-    #     # Draw help panel        
-    #     help_y = h - 110
-    #     cv2.rectangle(frame, (panel_x, help_y), (w, h), (30, 30, 30), -1)
-    #     cv2.putText(frame, "Gesture Controls:", (panel_x + 10, help_y + 20), font, 0.6, (255, 255, 255), 1)
-    #     cv2.putText(frame, "← Left: Back in History", (panel_x + 15, help_y + 40), font, 0.5, (200, 200, 200), 1)
-    #     cv2.putText(frame, "→ Right: Enter Folder", (panel_x + 15, help_y + 60), font, 0.5, (200, 200, 200), 1)
-    #     cv2.putText(frame, "↑ Up: Parent Directory", (panel_x + 15, help_y + 80), font, 0.5, (200, 200, 200), 1)
-    #     cv2.putText(frame, "↓ Down: Select Next", (panel_x + 15, help_y + 100), font, 0.5, (200, 200, 200), 1)
 
-    #     # Draw status bar
-    #     status_height = 30
-    #     cv2.rectangle(frame, (0, h - status_height), (panel_x, h), (30, 30, 30), -1)
-    #     cv2.putText(frame, self.status_message, (10, h - 10), font, 0.5, (200, 200, 200), 1)
-        
-    #     # Draw gesture path if tracking is active
-    #     if self.show_gesture_path and self.tracking_active and len(self.gesture_path) > 1:
-    #         points = []
-    #         for pos, _ in self.gesture_path:
-    #             x = int(pos[0] * w)
-    #             y = int(pos[1] * h)
-    #             points.append((x, y))
-                
-    #         # Draw connecting lines
-    #         for i in range(1, len(points)):
-    #             cv2.line(frame, points[i-1], points[i], self.path_color, self.path_thickness)
-                
-    #         # Highlight the most recent point
-    #         cv2.circle(frame, points[-1], 5, (0, 0, 255), -1)
-            
-    #     frame = self.draw_gesture_feedback(frame)
-    #     return frame
     
     def draw_ui(self, frame):
         """
@@ -884,11 +756,10 @@ class PersistentGestureNavigator:
         help_y = h - 110
         cv2.rectangle(frame, (panel_x, help_y), (w, h), (30, 30, 30), -1)
         cv2.putText(frame, "Gesture Controls:", (panel_x + 10, help_y + 20), font, 0.6, (255, 255, 255), 1)
-        cv2.putText(frame, "← Left: Back in History", (panel_x + 15, help_y + 40), font, 0.5, (200, 200, 200), 1)
+        cv2.putText(frame, "← Left: Previous Directory", (panel_x + 15, help_y + 40), font, 0.5, (200, 200, 200), 1)  
         cv2.putText(frame, "→ Right: Enter Folder", (panel_x + 15, help_y + 60), font, 0.5, (200, 200, 200), 1)
-        cv2.putText(frame, "↑ Up: Parent Directory", (panel_x + 15, help_y + 80), font, 0.5, (200, 200, 200), 1)
-        cv2.putText(frame, "↓ Down: Select Next", (panel_x + 15, help_y + 100), font, 0.5, (200, 200, 200), 1)
-
+        cv2.putText(frame, "↑ Up: Scroll Up", (panel_x + 15, help_y + 80), font, 0.5, (200, 200, 200), 1)  # Changed
+        cv2.putText(frame, "↓ Down: Scroll Down", (panel_x + 15, help_y + 100), font, 0.5, (200, 200, 200), 1)  # Changed
         # Draw status bar
         status_height = 30
         cv2.rectangle(frame, (0, h - status_height), (panel_x, h), (30, 30, 30), -1)
@@ -966,39 +837,6 @@ class PersistentGestureNavigator:
         self.show_status(f"Selected: {selected['name']}" if selected else "No items to select", 1.5)
         return True
     
-    # def check_vertical_movement(self, landmark):
-    #     """
-    #     Check for vertical movement to enable continuous scrolling.
-        
-    #     Args:
-    #         landmark: Current hand landmark
-    #     """
-    #     if not self.tracking_active or len(self.gesture_path) < 3:
-    #         return
-            
-    #     # Get current and previous positions
-    #     cur_pos = (landmark.x, landmark.y, landmark.z)
-    #     prev_pos, prev_time = self.gesture_path[-1]
-        
-    #     # Calculate vertical movement (normalized)
-    #     dy = cur_pos[1] - prev_pos[1]
-        
-    #     # Threshold for movement detection
-    #     threshold = 0.015
-        
-    #     # Timing check to avoid too rapid scrolling
-    #     current_time = time.time()
-    #     if current_time - self.last_scroll_time < 0.2:  # Limit to ~5 scrolls per second
-    #         return
-            
-    #     if dy > threshold:
-    #         # Downward movement - select next
-    #         self.select_next()
-    #         self.last_scroll_time = current_time
-    #     elif dy < -threshold:
-    #         # Upward movement - select previous
-    #         self.select_previous()
-    #         self.last_scroll_time = current_time
     
     def check_vertical_movement(self, landmark):
         """
@@ -1268,82 +1106,6 @@ class PersistentGestureNavigator:
         self.gesture_state = self.GESTURE_STATE_POTENTIAL
         self.potential_start_time = current_time
 
-    # def update_landmark_tracking(self, hand_landmark):
-    #     """
-    #     Update the landmark tracking and analyze motion to determine gesture state.
-        
-    #     Args:
-    #         hand_landmark: Current hand landmark
-    #     """
-    #     if not self.tracking_active:
-    #         return
-            
-    #     current_time = time.time()
-        
-    #     # Extract position
-    #     position = (hand_landmark.x, hand_landmark.y, hand_landmark.z)
-        
-    #     # Add to path
-    #     self.gesture_path.append((position, current_time))
-        
-    #     # Limit path length to prevent memory buildup
-    #     max_path_length = 30
-    #     if len(self.gesture_path) > max_path_length:
-    #         self.gesture_path = self.gesture_path[-max_path_length:]
-        
-    #     # Periodically check for idle state
-    #     if current_time - self.last_idle_check >= self.idle_check_interval:
-    #         is_idle = self._is_hand_idle(self.gesture_path)
-    #         has_deliberate_movement = self._has_deliberate_movement(self.gesture_path)
-    #         self.last_idle_check = current_time
-            
-    #         # State machine transitions
-    #         if self.gesture_state == self.GESTURE_STATE_POTENTIAL:
-    #             if has_deliberate_movement:
-    #                 # Transition to active gesture state
-    #                 self.gesture_state = self.GESTURE_STATE_ACTIVE
-    #                 self.idle_confirmation_count = 0
-    #             elif is_idle:
-    #                 self.idle_confirmation_count += 1
-    #                 if self.idle_confirmation_count >= self.required_idle_confirmations:
-    #                     # If hand has been idle for enough confirmations, reset to idle
-    #                     self.gesture_state = self.GESTURE_STATE_IDLE
-    #                     self.idle_confirmation_count = 0
-    #             elif current_time - self.potential_start_time > self.idle_potential_timeout:
-    #                 # If potential state times out without becoming active, reset
-    #                 self.gesture_state = self.GESTURE_STATE_IDLE
-                    
-    #         elif self.gesture_state == self.GESTURE_STATE_ACTIVE:
-    #             if is_idle:
-    #                 self.idle_confirmation_count += 1
-    #                 if self.idle_confirmation_count >= self.required_idle_confirmations:
-    #                     # If hand becomes idle after active movement, try to recognize the gesture
-    #                     gesture = self._recognize_gesture()
-    #                     if gesture:
-    #                         self._execute_gesture_action(gesture)
-    #                         self.last_recognized_gesture = gesture
-    #                         self.last_gesture_time = current_time
-    #                         self.gesture_state = self.GESTURE_STATE_RECOGNIZED
-    #                     else:
-    #                         # No recognizable gesture
-    #                         self.gesture_state = self.GESTURE_STATE_IDLE
-    #                     self.idle_confirmation_count = 0
-    #             else:
-    #                 self.idle_confirmation_count = 0
-                    
-    #         elif self.gesture_state == self.GESTURE_STATE_RECOGNIZED:
-    #             # After recognition, wait until we're sure the hand is idle before allowing new gestures
-    #             if is_idle:
-    #                 self.idle_confirmation_count += 1
-    #                 if self.idle_confirmation_count >= self.required_idle_confirmations:
-    #                     self.gesture_state = self.GESTURE_STATE_IDLE
-    #                     self.idle_confirmation_count = 0
-    #             else:
-    #                 self.idle_confirmation_count = 0
-        
-    #     # Check for continuous movement for scrolling when in idle state
-    #     if self.gesture_state == self.GESTURE_STATE_IDLE:
-    #         self.check_vertical_movement(hand_landmark)
     def update_landmark_tracking(self, hand_landmark):
         """
         Update the landmark tracking and analyze motion to determine gesture state.
@@ -1473,66 +1235,7 @@ class PersistentGestureNavigator:
         self.tracking_active = False
         self.gesture_state = self.GESTURE_STATE_IDLE
         self.idle_confirmation_count = 0
-    # def _recognize_gesture(self):
-    #     """
-    #     Analyze motion path to recognize deliberate gestures.
-        
-    #     Returns:
-    #         Gesture type or None
-    #     """
-    #     # At least 10 points needed for reliable gesture recognition
-    #     if len(self.gesture_path) < 10:
-    #         return None
-            
-    #     # Filter the path to include only the active portion (skip idle start/end)
-    #     active_path = self._extract_active_movement(self.gesture_path)
-        
-    #     # Need enough points in active path
-    #     if len(active_path) < 8:
-    #         return None
-            
-    #     # Get first and last point of active movement
-    #     first_point, first_time = active_path[0]
-    #     last_point, last_time = active_path[-1]
-        
-    #     # Calculate displacement
-    #     dx = last_point[0] - first_point[0]
-    #     dy = last_point[1] - first_point[1]
-        
-    #     # Calculate time and distance
-    #     dt = last_time - first_time
-    #     distance = math.sqrt(dx*dx + dy*dy)
-        
-    #     # Minimum thresholds
-    #     min_distance = 0.15
-    #     min_velocity = 0.5
-        
-    #     # Check if gesture meets minimum requirements
-    #     if dt <= 0 or distance < min_distance or distance/dt < min_velocity:
-    #         return None
-            
-    #     # Calculate straightness (ratio of direct distance to path length)
-    #     path_length = self._calculate_path_length(active_path)
-    #     straightness = distance / path_length if path_length > 0 else 0
-        
-    #     # Require relatively straight movement for gesture detection
-    #     if straightness < 0.7:  # At least 70% straight
-    #         return None
-            
-    #     # Determine primary direction
-    #     if abs(dx) > abs(dy):
-    #         # Horizontal swipe
-    #         if dx > 0:
-    #             return "swipe_right"
-    #         else:
-    #             return "swipe_left"
-    #     else:
-    #         # Vertical swipe
-    #         if dy > 0:
-    #             return "swipe_down"
-    #         else:
-    #             return "swipe_up"
-   
+
     def _extract_active_movement(self, trajectory):
         """
         Extract the portion of the trajectory that represents active movement,
