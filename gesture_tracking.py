@@ -482,6 +482,55 @@ class HandLandmarkTracker:
         history = self.landmark_history[hand_key][landmark_key]
         return [(point, point['timestamp']) for point in history]
     
+    # def calculate_velocity(self, hand_idx: int = 0, landmark_idx: int = 8) -> Optional[List[Dict[str, float]]]:
+    #     """
+    #     Calculate velocity of a landmark between frames.
+        
+    #     Args:
+    #         hand_idx: Which hand to track (0 for first hand)
+    #         landmark_idx: Which landmark to track (8 for index fingertip)
+            
+    #     Returns:
+    #         List of velocity data dictionaries or None if not enough data
+    #     """
+    #     trajectory = self.get_landmark_trajectory(hand_idx, landmark_idx)
+        
+    #     if len(trajectory) < 2:
+    #         return None
+        
+    #     velocities = []
+    #     for i in range(1, len(trajectory)):
+    #         curr_point, curr_time = trajectory[i]
+    #         prev_point, prev_time = trajectory[i-1]
+            
+    #         # Calculate time difference
+    #         dt = curr_time - prev_time
+    #         if dt <= 0:
+    #             continue
+                
+    #         # Calculate distance moved
+    #         dx = curr_point['x'] - prev_point['x']
+    #         dy = curr_point['y'] - prev_point['y']
+    #         dz = curr_point['z'] - prev_point['z']
+            
+    #         # Calculate velocity components
+    #         vx = dx / dt
+    #         vy = dy / dt
+    #         vz = dz / dt
+            
+    #         # Calculate velocity magnitude
+    #         v_mag = math.sqrt(vx*vx + vy*vy + vz*vz)
+            
+    #         velocities.append({
+    #             'timestamp': curr_time,
+    #             'vx': vx, 
+    #             'vy': vy, 
+    #             'vz': vz,
+    #             'magnitude': v_mag
+    #         })
+            
+    #     return velocities
+    
     def calculate_velocity(self, hand_idx: int = 0, landmark_idx: int = 8) -> Optional[List[Dict[str, float]]]:
         """
         Calculate velocity of a landmark between frames.
@@ -499,6 +548,8 @@ class HandLandmarkTracker:
             return None
         
         velocities = []
+        
+        # Process all pairs of consecutive points
         for i in range(1, len(trajectory)):
             curr_point, curr_time = trajectory[i]
             prev_point, prev_time = trajectory[i-1]
@@ -506,6 +557,7 @@ class HandLandmarkTracker:
             # Calculate time difference
             dt = curr_time - prev_time
             if dt <= 0:
+                self.logger.warning(f"Invalid time difference: {dt}. Skipping velocity calculation.")
                 continue
                 
             # Calculate distance moved
@@ -528,8 +580,72 @@ class HandLandmarkTracker:
                 'vz': vz,
                 'magnitude': v_mag
             })
+        
+        # Ensure we have the expected number of velocity calculations
+        if len(velocities) != len(trajectory) - 1:
+            self.logger.warning(f"Expected {len(trajectory) - 1} velocity samples, got {len(velocities)}")
             
         return velocities
+    # def determine_hand_state(self, velocities: List[Dict[str, float]]) -> Tuple[HandState, float]:
+    #     """
+    #     Determine if the hand is in IDLE, TRANSITIONING, or DELIBERATE motion state
+    #     based on velocity profile over multiple frames.
+        
+    #     Args:
+    #         velocities: List of velocity measurements
+            
+    #     Returns:
+    #         Tuple of (HandState, average_velocity_magnitude)
+    #     """
+    #     if not velocities or len(velocities) < 3:
+    #         return HandState.UNKNOWN, 0.0
+            
+    #     # Calculate average velocity magnitude over recent frames
+    #     recent_velocities = velocities[-min(len(velocities), self.motion_consistency_frames):]
+    #     magnitudes = [v['magnitude'] for v in recent_velocities]
+    #     avg_magnitude = sum(magnitudes) / len(magnitudes)
+        
+    #     # Calculate velocity variance as a measure of consistency
+    #     variance = sum((m - avg_magnitude) ** 2 for m in magnitudes) / len(magnitudes)
+    #     consistency = 1.0 / (1.0 + variance) if variance > 0 else 1.0
+        
+    #     # Analyze direction consistency
+    #     directions = []
+    #     for vel in recent_velocities:
+    #         if vel['magnitude'] > self.idle_threshold:
+    #             # Calculate normalized direction vector
+    #             direction = (vel['vx'], vel['vy'], vel['vz'])
+    #             magnitude = vel['magnitude']
+    #             normalized = tuple(d/magnitude for d in direction)
+    #             directions.append(normalized)
+        
+    #     direction_consistency = 0.0
+    #     if len(directions) >= 2:
+    #         # Calculate average dot product between consecutive direction vectors
+    #         dot_products = []
+    #         for i in range(1, len(directions)):
+    #             dot = sum(a*b for a, b in zip(directions[i-1], directions[i]))
+    #             dot_products.append(max(-1.0, min(1.0, dot)))  # Clamp to [-1,1]
+            
+    #         direction_consistency = sum(dot_products) / len(dot_products)
+    #         # Convert from [-1,1] to [0,1] range
+    #         direction_consistency = (direction_consistency + 1) / 2
+        
+    #     # Store for debugging
+    #     self.debug_info["motion_consistency"] = consistency
+    #     self.debug_info["direction_consistency"] = direction_consistency
+    #     self.debug_info["avg_velocity"] = avg_magnitude
+        
+    #     # Determine state based on velocity profile and consistency
+    #     if avg_magnitude < self.idle_threshold:
+    #         return HandState.IDLE, avg_magnitude
+    #     elif avg_magnitude > self.deliberate_threshold and consistency > 0.7:
+    #         if direction_consistency > 0.85:  # High direction consistency
+    #             return HandState.DELIBERATE, avg_magnitude
+    #         else:
+    #             return HandState.TRANSITIONING, avg_magnitude
+    #     else:
+    #         return HandState.TRANSITIONING, avg_magnitude
     
     def determine_hand_state(self, velocities: List[Dict[str, float]]) -> Tuple[HandState, float]:
         """
@@ -581,16 +697,50 @@ class HandLandmarkTracker:
         self.debug_info["direction_consistency"] = direction_consistency
         self.debug_info["avg_velocity"] = avg_magnitude
         
-        # Determine state based on velocity profile and consistency
+        # More strict criteria for DELIBERATE state
         if avg_magnitude < self.idle_threshold:
             return HandState.IDLE, avg_magnitude
-        elif avg_magnitude > self.deliberate_threshold and consistency > 0.7:
-            if direction_consistency > 0.85:  # High direction consistency
-                return HandState.DELIBERATE, avg_magnitude
-            else:
-                return HandState.TRANSITIONING, avg_magnitude
+        elif (avg_magnitude > self.deliberate_threshold and 
+            consistency > 0.8 and  # Increased from 0.7
+            direction_consistency > 0.9):  # Increased from 0.85
+            return HandState.DELIBERATE, avg_magnitude
         else:
             return HandState.TRANSITIONING, avg_magnitude
+
+    # def is_motion_consistent(self, current_motion: str) -> bool:
+    #     """
+    #     Check if the current motion direction is consistent over multiple frames.
+        
+    #     Args:
+    #         current_motion: The current detected motion
+            
+    #     Returns:
+    #         True if motion is consistent, False otherwise
+    #     """
+    #     # Skip consistency check for non-directional motions
+    #     if current_motion in ['stationary', 'insufficient_data', 'invalid_posture']:
+    #         return False
+            
+    #     # Add current direction to history
+    #     self.recent_directions.append(current_motion)
+        
+    #     # Need enough history for consistency check
+    #     if len(self.recent_directions) < self.motion_consistency_frames // 2:
+    #         return False
+            
+    #     # Count occurrences of each direction
+    #     direction_counts = {}
+    #     for direction in self.recent_directions:
+    #         direction_counts[direction] = direction_counts.get(direction, 0) + 1
+            
+    #     # Check if the current motion is the most frequent and appears enough times
+    #     if current_motion in direction_counts:
+    #         max_count = max(direction_counts.values())
+    #         consistency_ratio = direction_counts[current_motion] / len(self.recent_directions)
+    #         return (direction_counts[current_motion] == max_count and 
+    #                 consistency_ratio > 0.6)  # At least 60% consistent
+        
+    #     return False
     
     def is_motion_consistent(self, current_motion: str) -> bool:
         """
@@ -603,14 +753,16 @@ class HandLandmarkTracker:
             True if motion is consistent, False otherwise
         """
         # Skip consistency check for non-directional motions
-        if current_motion in ['stationary', 'insufficient_data', 'invalid_posture']:
+        if current_motion in ['stationary', 'insufficient_data', 'invalid_posture', 'transitioning', 'unclear_direction']:
             return False
             
         # Add current direction to history
         self.recent_directions.append(current_motion)
         
-        # Need enough history for consistency check
-        if len(self.recent_directions) < self.motion_consistency_frames // 2:
+        # Need enough history for consistency check - at least half of required frames
+        min_required = max(2, self.motion_consistency_frames // 2)
+        if len(self.recent_directions) < min_required:
+            self.logger.debug(f"Not enough direction history: {len(self.recent_directions)}/{min_required}")
             return False
             
         # Count occurrences of each direction
@@ -621,12 +773,20 @@ class HandLandmarkTracker:
         # Check if the current motion is the most frequent and appears enough times
         if current_motion in direction_counts:
             max_count = max(direction_counts.values())
-            consistency_ratio = direction_counts[current_motion] / len(self.recent_directions)
-            return (direction_counts[current_motion] == max_count and 
-                    consistency_ratio > 0.6)  # At least 60% consistent
+            total_directions = len(self.recent_directions)
+            consistency_ratio = direction_counts[current_motion] / total_directions
+            
+            is_most_frequent = direction_counts[current_motion] == max_count
+            is_frequent_enough = consistency_ratio > 0.65  # Requires at least 65% consistency
+            
+            self.logger.debug(
+                f"Motion consistency: {current_motion}, ratio: {consistency_ratio:.2f}, "
+                f"most frequent: {is_most_frequent}, frequent enough: {is_frequent_enough}"
+            )
+            
+            return is_most_frequent and is_frequent_enough and total_directions >= min_required
         
         return False
-    
     def is_valid_hand_posture(self, landmarks) -> bool:
         """
         Check if hand posture is valid: all fingers (except thumb) fully extended 
@@ -736,9 +896,120 @@ class HandLandmarkTracker:
         self.debug_info["posture_valid"] = valid_posture
         return valid_posture
             
+    # def detect_motion_gesture(self, landmarks, threshold: float = 0.1, 
+    #                          confidence_threshold: float = 0.6, 
+    #                          current_time: Optional[float] = None) -> Tuple[str, bool]:
+    #     """
+    #     Detect and validate motion gestures with enhanced filtering to distinguish
+    #     deliberate gestures from transitional or idle movements.
+        
+    #     Args:
+    #         landmarks: MediaPipe hand landmarks for posture validation
+    #         threshold: Minimum velocity magnitude to consider a swipe
+    #         confidence_threshold: Minimum ratio of dominant direction
+    #         current_time: Current timestamp (if None, uses time.time())
+            
+    #     Returns:
+    #         Tuple of (gesture_type, is_validated):
+    #           - gesture_type: 'swipe_left', 'swipe_right', 'swipe_up', 'swipe_down', 'stationary'
+    #           - is_validated: Boolean indicating if it passed validation
+    #     """
+    #     if current_time is None:
+    #         current_time = time.time()
+            
+    #     # First check posture validity
+    #     posture_valid = self.is_valid_hand_posture(landmarks)
+        
+    #     # If posture is invalid, we don't need to check motion
+    #     if not posture_valid:
+    #         self.current_motion_candidate = None
+    #         self.motion_start_time = 0
+    #         return 'invalid_posture', False
+            
+    #     # Detect the current motion direction
+    #     velocities = self.calculate_velocity(hand_idx=0, landmark_idx=8)
+    #     if not velocities or len(velocities) < 3:
+    #         self.current_hand_state = HandState.UNKNOWN
+    #         self.debug_info["hand_state"] = "UNKNOWN"
+    #         return 'insufficient_data', False
+        
+    #     # Determine hand movement state
+    #     hand_state, avg_magnitude = self.determine_hand_state(velocities)
+    #     self.current_hand_state = hand_state
+    #     self.debug_info["hand_state"] = hand_state.name
+        
+    #     # Add current state to history
+    #     self.recent_states.append(hand_state)
+        
+    #     # Calculate direction from velocities
+    #     recent_velocities = velocities[-min(3, len(velocities)):]
+    #     avg_vx = sum(v['vx'] for v in recent_velocities) / len(recent_velocities)
+    #     avg_vy = sum(v['vy'] for v in recent_velocities) / len(recent_velocities)
+        
+    #     # Only process deliberate movements
+    #     if hand_state != HandState.DELIBERATE:
+    #         # Reset motion tracking for non-deliberate states
+    #         if hand_state == HandState.IDLE:
+    #             self.current_motion_candidate = None
+    #             self.motion_start_time = 0
+                
+    #         # If we're in a transitional state, we may be preparing for a real gesture
+    #         # but we don't validate it yet
+    #         return 'stationary' if hand_state == HandState.IDLE else 'transitioning', False
+        
+    #     # For deliberate movements, determine the direction
+    #     # Calculate magnitude of the average velocity vector
+    #     avg_magnitude = math.sqrt(avg_vx**2 + avg_vy**2)
+        
+    #     # Skip if magnitude is too small (not enough movement)
+    #     if avg_magnitude < threshold:
+    #         return 'stationary', False
+            
+    #     # Calculate directional confidence
+    #     x_confidence = abs(avg_vx) / avg_magnitude if avg_magnitude > 0 else 0
+    #     y_confidence = abs(avg_vy) / avg_magnitude if avg_magnitude > 0 else 0
+        
+    #     # Determine the motion direction based on highest confidence
+    #     if x_confidence > y_confidence and x_confidence > confidence_threshold:
+    #         # Primarily horizontal motion
+    #         current_motion = 'swipe_right' if avg_vx > 0 else 'swipe_left'
+    #     elif y_confidence > x_confidence and y_confidence > confidence_threshold:
+    #         # Primarily vertical motion
+    #         current_motion = 'swipe_down' if avg_vy > 0 else 'swipe_up'
+    #     else:
+    #         # Motion is not clearly in any cardinal direction
+    #         current_motion = 'unclear_direction'
+            
+    #     # Check motion consistency over time
+    #     is_consistent = self.is_motion_consistent(current_motion)
+        
+    #     # If motion is unclear or not consistent, don't validate
+    #     if current_motion == 'unclear_direction' or not is_consistent:
+    #         return current_motion, False
+            
+    #     # Handle duration validation for consistent, deliberate motion
+    #     # If this is a new motion, start tracking it
+    #     if current_motion != self.current_motion_candidate:
+    #         self.current_motion_candidate = current_motion
+    #         self.motion_start_time = current_time
+    #         self.debug_info["tracking_duration"] = 0
+    #         return current_motion, False
+            
+    #     # Calculate how long this motion has been maintained
+    #     motion_duration = current_time - self.motion_start_time
+    #     self.debug_info["tracking_duration"] = motion_duration
+        
+    #     # If the motion has been maintained long enough, validate it
+    #     if motion_duration >= self.min_gesture_duration:
+    #         self.validated_motion = current_motion
+    #         return current_motion, True
+            
+    #     # Motion not yet valid based on duration
+    #     return current_motion, False
+    
     def detect_motion_gesture(self, landmarks, threshold: float = 0.1, 
-                             confidence_threshold: float = 0.6, 
-                             current_time: Optional[float] = None) -> Tuple[str, bool]:
+                         confidence_threshold: float = 0.6, 
+                         current_time: Optional[float] = None) -> Tuple[str, bool]:
         """
         Detect and validate motion gestures with enhanced filtering to distinguish
         deliberate gestures from transitional or idle movements.
@@ -751,8 +1022,8 @@ class HandLandmarkTracker:
             
         Returns:
             Tuple of (gesture_type, is_validated):
-              - gesture_type: 'swipe_left', 'swipe_right', 'swipe_up', 'swipe_down', 'stationary'
-              - is_validated: Boolean indicating if it passed validation
+            - gesture_type: 'swipe_left', 'swipe_right', 'swipe_up', 'swipe_down', 'stationary'
+            - is_validated: Boolean indicating if it passed validation
         """
         if current_time is None:
             current_time = time.time()
@@ -839,14 +1110,18 @@ class HandLandmarkTracker:
         motion_duration = current_time - self.motion_start_time
         self.debug_info["tracking_duration"] = motion_duration
         
-        # If the motion has been maintained long enough, validate it
-        if motion_duration >= self.min_gesture_duration:
+        # Verify hand state has been DELIBERATE for long enough
+        deliberate_count = sum(1 for s in self.recent_states if s == HandState.DELIBERATE)
+        deliberate_ratio = deliberate_count / len(self.recent_states) if self.recent_states else 0
+        
+        # If the motion has been maintained long enough and hand state has been consistently DELIBERATE
+        if motion_duration >= self.min_gesture_duration and deliberate_ratio >= 0.75:
             self.validated_motion = current_motion
             return current_motion, True
             
-        # Motion not yet valid based on duration
+        # Motion not yet valid based on duration or state consistency
         return current_motion, False
-    
+
     def reset_tracking(self) -> None:
         """Reset the gesture tracking state."""
         self.current_motion_candidate = None

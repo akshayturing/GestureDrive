@@ -301,6 +301,24 @@ class TestHandLandmarkTracker(unittest.TestCase):
         self.assertEqual(landmark_data["z"], 0)
         self.assertTrue("timestamp" in landmark_data)
     
+    # def test_calculate_velocity(self):
+    #     """Test velocity calculation from landmarks"""
+    #     # Add trajectory data for a left swipe
+    #     current_time = 1.0
+    #     self._simulate_left_swipe(current_time)
+        
+    #     # Calculate velocity
+    #     velocities = self.tracker.calculate_velocity()
+        
+    #     # Verify velocities
+    #     self.assertIsNotNone(velocities)
+    #     self.assertEqual(len(velocities), 5)  # 6 positions -> 5 velocities
+        
+    #     # Verify velocity direction is negative in x (left swipe)
+    #     for velocity in velocities:
+    #         self.assertTrue(velocity["vx"] < 0)  # Moving left = negative x velocity
+    #         self.assertAlmostEqual(velocity["vy"], 0, delta=0.01)  # No significant y movement
+    
     def test_calculate_velocity(self):
         """Test velocity calculation from landmarks"""
         # Add trajectory data for a left swipe
@@ -312,13 +330,12 @@ class TestHandLandmarkTracker(unittest.TestCase):
         
         # Verify velocities
         self.assertIsNotNone(velocities)
-        self.assertEqual(len(velocities), 5)  # 6 positions -> 5 velocities
+        self.assertEqual(len(velocities), 5, f"Expected 5 velocity samples, got {len(velocities)}")
         
         # Verify velocity direction is negative in x (left swipe)
         for velocity in velocities:
             self.assertTrue(velocity["vx"] < 0)  # Moving left = negative x velocity
             self.assertAlmostEqual(velocity["vy"], 0, delta=0.01)  # No significant y movement
-    
     def test_is_valid_hand_posture(self):
         """Test hand posture validation"""
         # Test with valid posture (extended fingers toward camera)
@@ -356,22 +373,53 @@ class TestHandLandmarkTracker(unittest.TestCase):
         state, avg_vel = self.tracker.determine_hand_state(velocities)
         self.assertEqual(state, HandState.TRANSITIONING)
     
+    # def test_is_motion_consistent(self):
+    #     """Test motion consistency detection"""
+    #     # Reset tracker's recent directions
+    #     self.tracker.recent_directions.clear()
+        
+    #     # Add consistent leftward motion
+    #     self.assertFalse(self.tracker.is_motion_consistent("swipe_left"))  # First call, not enough history
+    #     self.tracker.recent_directions.append("swipe_left")
+    #     self.assertFalse(self.tracker.is_motion_consistent("swipe_left"))  # Second call, still not enough
+    #     self.tracker.recent_directions.append("swipe_left")
+    #     self.assertTrue(self.tracker.is_motion_consistent("swipe_left"))  # Third call, now consistent
+        
+    #     # Test inconsistent motion
+    #     self.tracker.recent_directions[-1] = "swipe_right"  # Change last direction
+    #     self.assertFalse(self.tracker.is_motion_consistent("swipe_left"))  # No longer consistent
+    
     def test_is_motion_consistent(self):
         """Test motion consistency detection"""
         # Reset tracker's recent directions
         self.tracker.recent_directions.clear()
         
-        # Add consistent leftward motion
-        self.assertFalse(self.tracker.is_motion_consistent("swipe_left"))  # First call, not enough history
-        self.tracker.recent_directions.append("swipe_left")
-        self.assertFalse(self.tracker.is_motion_consistent("swipe_left"))  # Second call, still not enough
-        self.tracker.recent_directions.append("swipe_left")
-        self.assertTrue(self.tracker.is_motion_consistent("swipe_left"))  # Third call, now consistent
+        # Test with insufficient history
+        self.assertFalse(self.tracker.is_motion_consistent("swipe_left"), 
+                        "Should fail with no history")
         
-        # Test inconsistent motion
-        self.tracker.recent_directions[-1] = "swipe_right"  # Change last direction
-        self.assertFalse(self.tracker.is_motion_consistent("swipe_left"))  # No longer consistent
-    
+        # Add one entry - still insufficient
+        self.tracker.recent_directions.append("swipe_left")
+        self.assertFalse(self.tracker.is_motion_consistent("swipe_left"), 
+                        "Should fail with only 1 history entry")
+        
+        # Add second entry - now it has minimum required history (2)
+        self.tracker.recent_directions.append("swipe_left")
+        self.assertTrue(self.tracker.is_motion_consistent("swipe_left"), 
+                        "Should pass with 2 consistent entries")
+        
+        # Test with inconsistent history
+        self.tracker.recent_directions.clear()
+        self.tracker.recent_directions.extend(["swipe_left", "swipe_right"])
+        self.assertFalse(self.tracker.is_motion_consistent("swipe_left"), 
+                        "Should fail with inconsistent history")
+        
+        # Test when current motion is not the most frequent
+        self.tracker.recent_directions.clear()
+        self.tracker.recent_directions.extend(["swipe_left", "swipe_left", "swipe_right"])
+        self.assertFalse(self.tracker.is_motion_consistent("swipe_right"), 
+                        "Should fail when current motion isn't most frequent")
+
     def test_detect_motion_gesture_valid_swipe(self):
         """Test detection of a valid swipe gesture"""
         # Simulate a deliberate left swipe with valid hand posture
@@ -492,6 +540,24 @@ class TestHandLandmarkTracker(unittest.TestCase):
         self.assertFalse(is_valid)
         self.assertEqual(self.tracker.current_hand_state, HandState.IDLE)
     
+    # def test_transitioning_hand_detection(self):
+    #     """Test that transitioning hands are correctly identified"""
+    #     # Simulate a hand starting to move
+    #     current_time = 1.0
+    #     self._simulate_starting_motion(current_time)
+        
+    #     # Call with valid posture and transitioning motion
+    #     motion, is_valid = self.tracker.detect_motion_gesture(
+    #         self.valid_hand_landmarks, 
+    #         current_time=current_time
+    #     )
+        
+    #     # Should recognize as transitioning
+    #     self.assertIn(self.tracker.current_hand_state.name, ["TRANSITIONING", "DELIBERATE"])
+    #     # May be "transitioning" or might detect as "swipe_left" depending on threshold, 
+    #     # but should not be validated
+    #     self.assertFalse(is_valid)
+    
     def test_transitioning_hand_detection(self):
         """Test that transitioning hands are correctly identified"""
         # Simulate a hand starting to move
@@ -504,12 +570,10 @@ class TestHandLandmarkTracker(unittest.TestCase):
             current_time=current_time
         )
         
-        # Should recognize as transitioning
-        self.assertIn(self.tracker.current_hand_state.name, ["TRANSITIONING", "DELIBERATE"])
-        # May be "transitioning" or might detect as "swipe_left" depending on threshold, 
-        # but should not be validated
+        # Should specifically recognize as transitioning
+        self.assertEqual(self.tracker.current_hand_state, HandState.TRANSITIONING,
+                        f"Expected TRANSITIONING state, got {self.tracker.current_hand_state.name}")
         self.assertFalse(is_valid)
-    
     def test_get_debug_info(self):
         """Test debug info collection"""
         # Set up some state
@@ -552,6 +616,69 @@ class TestHandLandmarkTracker(unittest.TestCase):
         self.assertEqual(len(self.tracker.recent_directions), 0)
         self.assertEqual(len(self.tracker.recent_states), 0)
 
+    # def test_end_to_end_gesture_filtering(self):
+    #     """Test the complete gesture filtering pipeline with a realistic scenario"""
+    #     # Start with tracker in a clean state
+    #     self.tracker = HandLandmarkTracker(
+    #         buffer_size=5,
+    #         min_gesture_duration_ms=200,
+    #         motion_consistency_frames=3
+    #     )
+        
+    #     # 1. First simulate idle hand with valid posture
+    #     current_time = 0.0
+    #     self._simulate_idle_hand(current_time)
+    #     motion, is_valid = self.tracker.detect_motion_gesture(
+    #         self.valid_hand_landmarks,
+    #         current_time=current_time
+    #     )
+    #     self.assertEqual(motion, "stationary")
+    #     self.assertFalse(is_valid)
+        
+    #     # 2. Now simulate the beginning of a left swipe (transitioning)
+    #     current_time = 0.5
+    #     self._simulate_starting_motion(current_time)
+    #     motion, is_valid = self.tracker.detect_motion_gesture(
+    #         self.valid_hand_landmarks,
+    #         current_time=current_time
+    #     )
+    #     # Since the hand is just starting to move, it should not validate
+    #     self.assertFalse(is_valid)
+        
+    #     # 3. Now simulate a deliberate left swipe
+    #     current_time = 1.0
+    #     self._simulate_left_swipe(current_time)
+    #     motion, is_valid = self.tracker.detect_motion_gesture(
+    #         self.valid_hand_landmarks,
+    #         current_time=current_time
+    #     )
+    #     # First time detecting the swipe, should set the candidate but not validate yet
+    #     self.assertEqual(motion, "swipe_left")
+    #     self.assertFalse(is_valid)
+        
+    #     # 4. Continue the same gesture for long enough to meet duration requirement
+    #     # The consistent sustained gesture should now validate
+    #     self.tracker.current_motion_candidate = "swipe_left"
+    #     self.tracker.motion_start_time = current_time - 0.3  # 300ms > 200ms requirement
+    #     self.tracker.recent_directions.extend(["swipe_left", "swipe_left", "swipe_left"])
+        
+    #     motion, is_valid = self.tracker.detect_motion_gesture(
+    #         self.valid_hand_landmarks,
+    #         current_time=current_time
+    #     )
+    #     # Now it should validate the gesture
+    #     self.assertEqual(motion, "swipe_left")
+    #     self.assertTrue(is_valid)
+        
+    #     # 5. Finally, test that changing to invalid posture rejects the gesture
+    #     current_time = 1.5
+    #     motion, is_valid = self.tracker.detect_motion_gesture(
+    #         self.fist_hand_landmarks,
+    #         current_time=current_time
+    #     )
+    #     # Should reject due to invalid posture
+    #     self.assertEqual(motion, "invalid_posture")
+    #     self.assertFalse(is_valid)
     def test_end_to_end_gesture_filtering(self):
         """Test the complete gesture filtering pipeline with a realistic scenario"""
         # Start with tracker in a clean state
@@ -581,7 +708,7 @@ class TestHandLandmarkTracker(unittest.TestCase):
         # Since the hand is just starting to move, it should not validate
         self.assertFalse(is_valid)
         
-        # 3. Now simulate a deliberate left swipe
+        # 3. Now simulate a more deliberate left swipe
         current_time = 1.0
         self._simulate_left_swipe(current_time)
         motion, is_valid = self.tracker.detect_motion_gesture(
@@ -593,10 +720,13 @@ class TestHandLandmarkTracker(unittest.TestCase):
         self.assertFalse(is_valid)
         
         # 4. Continue the same gesture for long enough to meet duration requirement
-        # The consistent sustained gesture should now validate
+        # But we need to ensure the hand state has been DELIBERATE long enough
         self.tracker.current_motion_candidate = "swipe_left"
         self.tracker.motion_start_time = current_time - 0.3  # 300ms > 200ms requirement
         self.tracker.recent_directions.extend(["swipe_left", "swipe_left", "swipe_left"])
+        
+        # Add sufficient DELIBERATE state history
+        self.tracker.recent_states.extend([HandState.DELIBERATE, HandState.DELIBERATE, HandState.DELIBERATE])
         
         motion, is_valid = self.tracker.detect_motion_gesture(
             self.valid_hand_landmarks,
@@ -604,7 +734,7 @@ class TestHandLandmarkTracker(unittest.TestCase):
         )
         # Now it should validate the gesture
         self.assertEqual(motion, "swipe_left")
-        self.assertTrue(is_valid)
+        self.assertTrue(is_valid, "Gesture should be validated when all criteria are met")
         
         # 5. Finally, test that changing to invalid posture rejects the gesture
         current_time = 1.5
@@ -615,7 +745,6 @@ class TestHandLandmarkTracker(unittest.TestCase):
         # Should reject due to invalid posture
         self.assertEqual(motion, "invalid_posture")
         self.assertFalse(is_valid)
-
 
 if __name__ == '__main__':
     unittest.main()
