@@ -1654,7 +1654,7 @@ import cv2
 import mediapipe as mp
 import time
 import threading
-
+from gesture_tracking import HandLandmarkTracker
 class LandmarkBuffer:
     """
     Maintains a time-sequenced buffer of hand landmark coordinates
@@ -1858,7 +1858,24 @@ class Camera:
         
         # Initialize landmark buffer for motion tracking - NEW ADDITION
         self.landmark_buffer = LandmarkBuffer(max_frames=10)
-    
+        # Gesture tracking setup
+        self.landmark_tracker = HandLandmarkTracker(buffer_size=10, min_gesture_duration_ms=500)
+        # Gesture state tracking
+        self.raw_gesture = None        # From your existing gesture recognizer
+        self.validated_gesture = None  # For validated static gestures
+        
+        self.raw_motion = None         # Detected motion (unvalidated)
+        self.validated_motion = None   # Validated motion gesture
+        self.last_gesture_time = 0
+        self.gesture_cooldown = 0.7    # Seconds between gesture recognition
+        
+        # Motion detection parameters
+        self.motion_threshold = 0.12       # Min velocity for motion detection
+        self.confidence_threshold = 0.6    # Directional confidence threshold
+        
+        # Debug visualization
+        self.show_validation_status = False
+        
     def start(self):
         """Start the camera capture thread"""
         if self.is_running:
@@ -1919,7 +1936,44 @@ class Camera:
         # Process the RGB frame with MediaPipe
         results = self.hands.process(rgb_frame)
         
-        # Store the hand landmarks data for external use
+        current_time = time.time()
+        
+        # Process gestures if hands are detected
+        if results.multi_hand_landmarks and len(results.multi_hand_landmarks) > 0:
+            # Add landmarks to the tracker
+            self.landmark_tracker.add_landmarks(results.multi_hand_landmarks)
+            
+            # Get the primary hand landmarks
+            primary_hand_landmarks = results.multi_hand_landmarks[0].landmark
+            
+            # Static gesture processing (using your existing gesture recognizer)
+            # This code depends on your existing implementation...
+            
+            # Motion gesture processing with validation
+            if current_time - self.last_gesture_time > self.gesture_cooldown:
+                # Detect and validate motion gestures
+                motion, is_validated = self.landmark_tracker.detect_motion_gesture(
+                    landmarks=primary_hand_landmarks,
+                    threshold=self.motion_threshold,
+                    confidence_threshold=self.confidence_threshold,
+                    current_time=current_time
+                )
+                
+                # Update gesture state
+                if motion not in ['stationary', 'insufficient_data', 'invalid_posture']:
+                    self.raw_motion = motion
+                    
+                    # Store validated gesture
+                    if is_validated:
+                        self.validated_motion = motion
+                        self.last_gesture_time = current_time
+                        self.logger.info(f"Validated motion gesture: {motion}")
+        
+        # Show validation debug info if enabled
+        if self.show_validation_status and frame is not None:
+            self._draw_validation_info(frame)
+            
+       # Store the hand landmarks data for external use
         self.hand_landmarks_data = results.multi_hand_landmarks
         
         # Add landmarks to the buffer with current timestamp - NEW ADDITION
@@ -2751,6 +2805,52 @@ class Camera:
             self.frame = None
             self.processed_frame = None
             self.hand_landmarks_data = None
+
+    def get_current_gestures(self):
+        """Get current gesture status for API or UI"""
+        return {
+            'raw_gesture': self.raw_gesture,
+            'validated_gesture': self.validated_gesture,
+            'raw_motion': self.raw_motion,
+            'validated_motion': self.validated_motion,
+            'debug': self.landmark_tracker.get_debug_info() if self.show_validation_status else None
+        }
+    
+    def toggle_validation_display(self):
+        """Toggle visibility of validation debug info"""
+        self.show_validation_status = not self.show_validation_status
+        return self.show_validation_status
+    
+    def _draw_validation_info(self, frame):
+        """Draw validation information on frame for debugging"""
+        # Get debug info from tracker
+        debug_info = self.landmark_tracker.get_debug_info()
+        
+        # Set text properties
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.6
+        thickness = 1
+        padding = 10
+        line_height = 25
+        
+        # Background rectangle
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (10, 10), (350, 170), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+        
+        # Draw text lines
+        lines = [
+            f"Raw motion: {self.raw_motion or 'None'}",
+            f"Validated: {self.validated_motion or 'None'}",
+            f"Duration: {debug_info['tracking_duration']:.2f}s / {self.landmark_tracker.min_gesture_duration:.2f}s",
+            f"Posture: {'Valid' if debug_info['posture_valid'] else 'Invalid'}",
+            f"Reason: {debug_info['validation_reason']}"
+        ]
+        
+        y = 30
+        for line in lines:
+            cv2.putText(frame, line, (padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+            y += line_height
 
     def get_processed_frame(self):
         """

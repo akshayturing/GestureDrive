@@ -7,7 +7,7 @@ import threading
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
-
+from gesture_tracking import HandLandmarkTracker
 from directory_state_manager import DirectoryStateManager
 
 class PersistentGestureNavigator:
@@ -427,6 +427,53 @@ class PersistentGestureNavigator:
                 return "swipe_down"
             else:
                 return "swipe_up"
+    # def _execute_gesture_action(self, gesture):
+    #     """
+    #     Execute file system action based on gesture.
+        
+    #     Args:
+    #         gesture: The recognized gesture
+            
+    #     Returns:
+    #         Success status and message
+    #     """
+    #     result = False
+    #     message = ""
+        
+    #     if gesture == "swipe_left":
+    #         # Move to previous directory
+    #         result = self.state_manager.navigate_history(forward=False)
+    #         message = "Navigated to previous directory" if result else "No previous directory"
+            
+    #     elif gesture == "swipe_right":
+    #         # Enter currently selected folder
+    #         selected = self.get_selected_item()
+    #         if selected and selected['is_dir']:
+    #             result = self.state_manager.change_directory(selected['path'])
+    #             message = f"Entered directory: {Path(selected['path']).name}" if result else f"Failed to enter {Path(selected['path']).name}"
+    #         else:
+    #             message = "Cannot enter: Not a directory or no item selected"
+                
+    #     elif gesture == "swipe_up":
+    #         # Scroll up in the file list
+    #         result = self.select_previous()
+    #         selected = self.get_selected_item()
+    #         message = f"Selected: {selected['name']}" if selected else "No items to select"
+            
+    #     elif gesture == "swipe_down":
+    #         # Scroll down in the file list
+    #         result = self.select_next()
+    #         selected = self.get_selected_item()
+    #         message = f"Selected: {selected['name']}" if selected else "No items to select"
+        
+    #     # Update our local state from the persistent state
+    #     if result and (gesture == "swipe_left" or gesture == "swipe_right"):
+    #         self._update_from_state()
+            
+    #     # Show status message
+    #     self.show_status(message, 2.0)
+        
+    #     return result
     def _execute_gesture_action(self, gesture):
         """
         Execute file system action based on gesture.
@@ -474,7 +521,6 @@ class PersistentGestureNavigator:
         self.show_status(message, 2.0)
         
         return result
-
     def select_next(self):
         """Select the next item in the directory."""
         if not self.current_items:
@@ -752,14 +798,13 @@ class PersistentGestureNavigator:
         if start_idx + visible_count < total_items:
             cv2.putText(frame, "▼", (w - 20, list_y_end + 5), font, 0.7, (150, 150, 150), 1)
             
-        # Draw help panel        
         help_y = h - 110
         cv2.rectangle(frame, (panel_x, help_y), (w, h), (30, 30, 30), -1)
         cv2.putText(frame, "Gesture Controls:", (panel_x + 10, help_y + 20), font, 0.6, (255, 255, 255), 1)
         cv2.putText(frame, "← Left: Previous Directory", (panel_x + 15, help_y + 40), font, 0.5, (200, 200, 200), 1)  
         cv2.putText(frame, "→ Right: Enter Folder", (panel_x + 15, help_y + 60), font, 0.5, (200, 200, 200), 1)
-        cv2.putText(frame, "↑ Up: Scroll Up", (panel_x + 15, help_y + 80), font, 0.5, (200, 200, 200), 1)  # Changed
-        cv2.putText(frame, "↓ Down: Scroll Down", (panel_x + 15, help_y + 100), font, 0.5, (200, 200, 200), 1)  # Changed
+        cv2.putText(frame, "↑ Up: Scroll Up", (panel_x + 15, help_y + 80), font, 0.5, (200, 200, 200), 1)
+        cv2.putText(frame, "↓ Down: Scroll Down", (panel_x + 15, help_y + 100), font, 0.5, (200, 200, 200), 1)
         # Draw status bar
         status_height = 30
         cv2.rectangle(frame, (0, h - status_height), (panel_x, h), (30, 30, 30), -1)
@@ -1288,7 +1333,32 @@ class PersistentGestureNavigator:
             return trajectory
             
         return trajectory[start_idx:end_idx+1]
-
+    def process_gesture(self, gesture: str) -> Dict:
+        """
+        Process a validated gesture and perform the corresponding navigation action.
+        
+        Args:
+            gesture: The recognized and validated gesture string
+                
+        Returns:
+            Dict containing the current navigation state
+        """
+        self.logger.info(f"Processing validated gesture: {gesture}")
+        
+        # Track gestures in debug mode
+        if self.debug_mode:
+            self.last_gestures.append(gesture)
+            if len(self.last_gestures) > 10:
+                self.last_gestures.pop(0)
+        
+        # Check if this is a recognized gesture with an action
+        if gesture in self.gesture_actions:
+            # Execute the corresponding action
+            action = self.gesture_actions[gesture]
+            return action()
+        else:
+            self.logger.debug(f"No action defined for gesture: {gesture}")
+            return self.get_current_state()
     def _calculate_path_length(self, trajectory):
         """
         Calculate the total length of a trajectory path.
