@@ -622,14 +622,14 @@ import threading
 
 from camera import Camera
 from gesture_recognizer import GestureRecognizer
-
+from gesture_file_controller import GestureFileController
 app = Flask(__name__)
 
 # Global instances
 camera = None
 recognizer = None
 camera_lock = threading.Lock()
-
+file_controller = GestureFileController()
 def get_camera():
     global camera
     with camera_lock:
@@ -644,6 +644,107 @@ def get_recognizer():
     if recognizer is None:
         recognizer = GestureRecognizer(buffer_size=5)
     return recognizer
+
+@app.route('/api/gestures')
+def api_gestures():
+    """API endpoint to get current gesture data including selection gestures"""
+    gesture_data = {
+        'gesture': camera.current_gesture,
+        'motion': camera.current_motion,
+        'selection_gesture': camera.current_selection_gesture
+    }
+    return jsonify(gesture_data)
+
+@app.route('/files')
+def files():
+    """File browser page with gesture-based navigation and selection"""
+    return render_template('files.html')
+
+@app.route('/api/directory')
+def api_directory():
+    """API endpoint to get current directory information"""
+    return jsonify(file_controller.get_directory_info())
+
+@app.route('/api/navigate')
+def api_navigate():
+    """API endpoint for directory navigation"""
+    direction = request.args.get('direction', '')
+    success = file_controller.navigate_directory(direction)
+    
+    return jsonify({
+        'success': success,
+        'directory': file_controller.get_directory_info()
+    })
+
+# Add API endpoint for selection navigation
+@app.route('/api/select')
+def api_select():
+    """API endpoint for file selection navigation"""
+    action = request.args.get('action', '')
+    
+    if action == 'next':
+        success = file_controller.select_next()
+    elif action == 'previous':
+        success = file_controller.select_previous()
+    else:
+        success = False
+    
+    return jsonify({
+        'success': success,
+        'directory': file_controller.get_directory_info()
+    })
+
+# Add API endpoint for processing selection gestures
+@app.route('/api/process_selection')
+def api_process_selection():
+    """API endpoint for processing selection gestures"""
+    gesture = request.args.get('gesture', '')
+    result = file_controller.process_selection_gesture(gesture)
+    
+    # Add directory info to the response
+    result['directory'] = file_controller.get_directory_info()
+    
+    return jsonify(result)
+
+def gesture_processor():
+    """Background thread to process gestures and update file selection"""
+    last_update_time = 0
+    cooldown = 0.5  # seconds between updates
+    
+    while True:
+        current_time = time.time()
+        
+        if current_time - last_update_time > cooldown:
+            # Process motion gestures for navigation
+            if camera.current_motion == "swipe_up":
+                file_controller.select_previous()
+                last_update_time = current_time
+            elif camera.current_motion == "swipe_down":
+                file_controller.select_next()
+                last_update_time = current_time
+            elif camera.current_motion == "swipe_left":
+                file_controller.navigate_directory("up")
+                last_update_time = current_time
+            elif camera.current_motion == "swipe_right":
+                file_controller.navigate_directory("down")
+                last_update_time = current_time
+                
+            # Process selection gestures
+            if camera.current_selection_gesture:
+                file_controller.process_selection_gesture(camera.current_selection_gesture)
+                last_update_time = current_time
+        
+        time.sleep(0.1)  # Sleep to avoid excessive CPU usage
+
+# Start gesture processor thread when app starts
+import threading
+from werkzeug.serving import is_running_from_reloader
+
+@app.before_first_request
+def start_gesture_thread():
+    """Start the background gesture processing thread"""
+    if not is_running_from_reloader() or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        threading.Thread(target=gesture_processor, daemon=True).start()
 
 @app.route('/')
 def index():

@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+
+{% block title %}GestureDrive - File Browser{% endblock %}
+
+{% block content %}
+<div>
+<h1>
+File Browser
+
+</h1>
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+<h5>
+Current Directory:
+
+<span>
+/
+
+</span>
+</h5>
+                <div class="nav-buttons">
+<button>
+<i class="fas fa-arrow-left"></i>
+
+Back
+
+</button>
+<button>
+<i class="fas fa-level-up-alt"></i>
+
+Up
+
+</button>
+<button>
+<i class="fas fa-sync"></i>
+
+Refresh
+
+</button>
+</div>
+            </div>
+<div>
+                <div id="file-list" class="file-browser">
+                    <!-- Files and directories will be populated dynamically -->
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+<span>
+Loading...
+
+</span>
+</div>
+<p>
+Loading files...
+
+</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+<div>
+            <div class="card-header">
+<h5>
+Selected File
+
+</h5>
+</div>
+<div>
+                <div id="selected-file-info">
+<p>
+No file selected
+
+</p>
+</div>
+            </div>
+        </div>
+    </div>
+<div>
+        <div class="card">
+            <div class="card-header">
+<h5>
+Gesture Controls
+
+</h5>
+</div>
+<div>
+                <div class="gesture-info mb-3">
+<p>
+Current Gesture:
+
+<span>
+None
+
+</span>
+</p>
+<p>
+Current Motion:
+
+<span>
+Stationary
+
+</span>
+</p>
+<p>
+Selection Gesture:
+
+<span>
+None
+
+</span>
+</p>
+</div>
+<h6>
+File Navigation:
+
+</h6>
+<ul>
+<li>
+<strong>
+Swipe Up:
+
+</strong>
+Select previous file
+
+</li>
+<li>
+<strong>
+Swipe Down:
+
+</strong>
+Select next file
+
+</li>
+<li>
+<strong>
+Swipe Left:
+
+</strong>
+Go to parent directory
+
+</li>
+<li>
+<strong>
+Swipe Right:
+
+</strong>
+Enter selected folder
+
+</li>
+</ul>
+<h6>
+File Selection:
+
+</h6>
+<ul>
+<li>
+<strong>
+Tap Gesture:
+
+</strong>
+Select file
+
+</li>
+<li>
+<strong>
+Pinch Gesture:
+
+</strong>
+Open/Enter file
+
+</li>
+</ul>
+            </div>
+        </div>
+<div>
+            <div class="card-header">
+<h5>
+Hand Position
+
+</h5>
+</div>
+<div>
+                <!-- Small webcam view for feedback -->
+                <img id="hand-position" src="{{ url_for('video_feed') }}" class="img-fluid rounded" 
+                     style="max-height: 200px;">
+</div>
+        </div>
+    </div>
+</div>
+</div>
+<style>
+.file-browser {
+max-height: 400px;
+overflow-y: auto;
+}
+
+.file-item {
+padding: 8px 12px;
+border-bottom: 1px solid #eee;
+cursor: default;
+display: flex;
+align-items: center;
+}
+
+.file-item:hover {
+background-color: #f8f9fa;
+}
+
+.file-item.selected {
+background-color: #e7f5ff;
+border-left: 3px solid #007bff;
+}
+
+.file-item.activating {
+background-color: #d4edda;
+animation: pulse-selection 0.5s;
+}
+
+@keyframes pulse-selection {
+0% { background-color: #e7f5ff; }
+50% { background-color: #28a745; }
+100% { background-color: #e7f5ff; }
+}
+
+.folder-icon::before {
+content: "📁";
+margin-right: 8px;
+}
+
+.file-icon::before {
+content: "📄";
+margin-right: 8px;
+}
+
+/* Badge animations */
+.badge-highlight {
+animation: badge-pulse 1s;
+}
+
+@keyframes badge-pulse {
+0% { transform: scale(1); }
+50% { transform: scale(1.2); }
+100% { transform: scale(1); }
+}
+
+</style>
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+// JavaScript for file browser interaction
+document.addEventListener('DOMContentLoaded', function() {
+// Elements
+const fileList = document.getElementById('file-list');
+const currentPath = document.getElementById('current-path');
+const selectedFileInfo = document.getElementById('selected-file-info');
+const backBtn = document.getElementById('back-btn');
+const upBtn = document.getElementById('up-btn');
+const refreshBtn = document.getElementById('refresh-btn');
+
+// Gesture display elements
+const currentGesture = document.getElementById('current-gesture');
+const currentMotion = document.getElementById('current-motion');
+const selectionGesture = document.getElementById('selection-gesture');
+
+// Track selection
+let selectedIndex = -1;
+
+// Load directory contents
+function loadDirectory() {
+    fetch('/api/directory')
+        .then(response => response.json())
+        .then(data => {
+            // Update path display
+            currentPath.textContent = data.current_directory;
+            
+            // Generate file list HTML
+            if (data.files.length === 0) {
+                fileList.innerHTML = '<div>No files found</div>';
+            } else {
+                let html = '';
+                data.files.forEach((file, index) => { 
+                const isDir = data.files[index].indexOf('.') === -1;
+                const itemClass = "file-item ${isDir ? 'folder-icon' : 'file-icon'}${index === data.selected_index ? ' selected' : ''}"; 
+                html += `<div>  ${file} </div> `; });
+                fileList.innerHTML = html;      
+
+                // Update selected item
+                selectedIndex = data.selected_index;
+                updateSelectedInfo(data);
+            }
+                    
+                    // Update navigation button states
+                    backBtn.disabled = !data.can_go_back;
+                    upBtn.disabled = !data.can_go_up;
+                }).catch(error => {
+            console.error('Error loading directory:', error);
+            fileList.innerHTML = '<div>Error loading directory contents</div>';});
+        }
+
+// Update selected file information
+function updateSelectedInfo(data) {
+    if (data.selected_index >= 0 && data.files.length > data.selected_index) {
+        const selectedFile = data.files[data.selected_index];
+        const fullPath = `${data.current_directory}/${selectedFile}`;
+        
+        // Determine if it's a file or directory
+        const isDir = selectedFile.indexOf('.') === -1; // Simple check, improve as needed
+        
+        let html = `<h5> ${selectedFile}  </h5> <p> <strong> Path:  </strong> ${fullPath} </p> <p> <strong> Type: </strong> ${isDir ? 'Directory' : 'File'} </p>`;
+        
+        selectedFileInfo.innerHTML = html;
+        
+        // Highlight selected item in list
+        document.querySelectorAll('.file-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        const selectedElement = document.querySelector(`.file-item[data-index="${data.selected_index}"]`);
+        if (selectedElement) {
+            selectedElement.classList.add('selected');
+            // Scroll into view if needed
+            selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    } else {
+        selectedFileInfo.innerHTML = '<p>No file selected</p>';}
+}
+
+// Click handlers for navigation buttons
+backBtn.addEventListener('click', () => {
+    fetch('/api/navigate?direction=back')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadDirectory();
+            }
+        });
+});
+
+upBtn.addEventListener('click', () => {
+    fetch('/api/navigate?direction=up')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadDirectory();
+            }
+        });
+});
+
+refreshBtn.addEventListener('click', loadDirectory);
+
+// File item click handler (for mouse navigation)
+fileList.addEventListener('click', event => {
+    const fileItem = event.target.closest('.file-item');
+    if (fileItem) {
+        const index = parseInt(fileItem.dataset.index);
+        
+        // Select the clicked item
+        fetch(`/api/select?action=select&index=${index}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateSelectedInfo(data.directory);
+                }
+            });
+    }
+});
+
+// Double-click to activate/enter (for mouse navigation)
+fileList.addEventListener('dblclick', event => {
+    const fileItem = event.target.closest('.file-item');
+    if (fileItem && fileItem.classList.contains('folder-icon')) {
+        fetch('/api/navigate?direction=down')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadDirectory();
+                }
+            });
+    }
+});
+
+// Gesture processing loop
+let lastGestureTime = 0;
+const gestureCooldown = 500; // ms cooldown between gesture processing
+
+function processGestures() {
+    const currentTime = Date.now();
+    
+    // Only check for new gestures after cooldown
+    if (currentTime - lastGestureTime > gestureCooldown) {
+        fetch('/api/gestures')
+            .then(response => response.json())
+            .then(data => {
+                // Update gesture displays
+                updateGestureDisplay(data.gesture, currentGesture);
+                updateGestureDisplay(data.motion, currentMotion);
+                updateGestureDisplay(data.selection_gesture, selectionGesture);
+                
+                // Process selection gesture
+                if (data.selection_gesture) {
+                    fetch(`/api/process_selection?gesture=${data.selection_gesture}`)
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.action === 'navigate' || result.action === 'activate') {
+                                loadDirectory();
+                            } else if (result.action === 'select') {
+                                updateSelectedInfo(result.directory);
+                                
+                                // Highlight the selection with animation
+                                const selectedElement = document.querySelector(`.file-item[data-index="${result.directory.selected_index}"]`);
+                                if (selectedElement) {
+                                    selectedElement.classList.add('activating');
+                                    setTimeout(() => {
+                                        selectedElement.classList.remove('activating');
+                                    }, 500);
+                                }
+                            }
+                        });
+                        
+                    lastGestureTime = currentTime;
+                }
+            })
+            .catch(error => console.error('Error fetching gestures:', error));
+    }
+    
+    // Continue the loop
+    requestAnimationFrame(processGestures);
+}
+
+function updateGestureDisplay(value, element) {
+    if (value && element.textContent !== value) {
+        element.textContent = value;
+        element.classList.add('badge-highlight');
+        setTimeout(() => {
+            element.classList.remove('badge-highlight');
+        }, 1000);
+    } else if (!value) {
+        element.textContent = 'None';
+    }
+}
+
+// Initialize
+loadDirectory();
+processGestures();
+});
+
+</script>
+{% endblock %}
+
