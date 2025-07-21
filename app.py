@@ -1175,6 +1175,7 @@ import threading
 import atexit
 import cv2
 import numpy as np
+from flask import send_file  # Add this import
 
 from camera import Camera
 from gesture_file_controller import GestureFileController
@@ -1315,6 +1316,17 @@ def index():
 def about():
     """About page with project information"""
     return render_template('about.html')
+
+@app.route('/api/file/preview')
+def api_file_preview():
+    """API endpoint to get a preview of a file"""
+    file_path = request.args.get('path', '')
+    
+    if not file_path:
+        return jsonify({'status': 'error', 'message': 'No file path provided'})
+    
+    preview_data = file_controller.get_file_preview(file_path)
+    return jsonify(preview_data)
 
 @app.route('/settings')
 def settings():
@@ -1458,3 +1470,65 @@ if __name__ == '__main__':
         print("Application exiting, final cleanup")
         cleanup_resources()
         cv2.destroyAllWindows()
+
+@app.route('/api/file/image/<p>')
+def serve_image(filename):
+    """Serve image files for preview"""
+    # Validate the file exists and is an image before serving
+    if not os.path.exists(filename):
+        return "Image not found", 404
+
+    # Check that it's actually an image file
+    import imghdr
+    img_type = imghdr.what(filename)
+
+    if img_type not in ['jpeg', 'png']:
+        return "Invalid image file", 403
+        
+    # Determine the correct MIME type
+    mime_types = {
+        'jpeg': 'image/jpeg',
+        'png': 'image/png'
+    }
+
+    # Serve the file with the correct content type
+    return send_file(filename, mimetype=mime_types.get(img_type, 'application/octet-stream'))
+@app.route('/api/view_pdf')
+def view_pdf():
+    """View PDF files in external viewer"""
+    file_path = request.args.get('path', '')
+
+    if not file_path or not os.path.exists(file_path):
+        return "PDF file not found", 404
+        
+    # Validate it's a PDF
+    file_ext = os.path.splitext(file_path)[1].lower()
+    if file_ext != '.pdf':
+        return "Invalid PDF file", 403
+        
+    # Return PDF viewer page 
+    return render_template('pdf_viewer.html', pdf_path=file_path)
+@app.route('/api/file/serve_pdf')
+def serve_pdf():
+    """Serve PDF files to the viewer"""
+    file_path = request.args.get('path', '')
+    download = request.args.get('download', 'false').lower() == 'true'
+
+    if not file_path or not os.path.exists(file_path):
+        return "PDF file not found", 404
+        
+    # Validate it's a PDF
+    file_ext = os.path.splitext(file_path)[1].lower()
+    if file_ext != '.pdf':
+        return "Invalid PDF file", 403
+        
+    # Set attachment header if downloading
+    if download:
+        return send_file(
+            file_path, 
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=os.path.basename(file_path)
+        )
+    else:
+        return send_file(file_path, mimetype='application/pdf')

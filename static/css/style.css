@@ -127,3 +127,53 @@
 .file-icon.audio::before { content: "🎵"; }
 .file-icon.code::before { content: "📊"; }
 .file-icon.archive::before { content: "🗄️"; }
+
+/* File type-specific styling */
+.file-item.file-icon[data-extension="txt"]::before,
+.file-item.file-icon[data-extension="md"]::before {
+    content: "📄";
+}
+
+.file-item.file-icon[data-extension="jpg"]::before,
+.file-item.file-icon[data-extension="jpeg"]::before, 
+.file-item.file-icon[data-extension="png"]::before {
+    content: "🖼️";
+}
+
+.file-item.file-icon[data-extension="pdf"]::before {
+    content: "📕";
+}
+
+/* Selected file item highlight */
+.file-item.selected {
+    background-color: #e7f5ff;
+    border-left: 3px solid #007bff;
+}
+
+/* File activation animation */
+.file-item.activating {
+    background-color: #d4edda;
+    animation: pulse-selection 0.5s;
+}
+
+@keyframes pulse-selection {
+    0% { background-color: #e7f5ff; }
+    50% { background-color: #28a745; }
+    100% { background-color: #e7f5ff; }
+}
+
+/* File preview styles */
+.text-preview {
+    font-family: monospace;
+    white-space: pre-wrap;
+    max-height: 300px;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.image-preview img {
+    max-height: 300px;
+    max-width: 100%;
+    object-fit: contain;
+}

@@ -114,9 +114,50 @@ class GestureFileController:
         filepath = os.path.join(self.current_directory, filename)
         return filename, filepath
     
+    # def process_selection_gesture(self, gesture):
+    #     """
+    #     Process file selection gestures
+    #     gesture: "tap" (select) or "pinch" (activate)
+    #     Returns: action taken and relevant information
+    #     """
+    #     if not self.files_list or self.selected_index < 0:
+    #         return {"action": "none", "reason": "no_selection"}
+        
+    #     filename, filepath = self.get_selected_file()
+        
+    #     if gesture == "tap":
+    #         # Tap just confirms selection - already handled by index
+    #         return {
+    #             "action": "select", 
+    #             "file": filename,
+    #             "path": filepath,
+    #             "type": "directory" if os.path.isdir(filepath) else "file"
+    #         }
+            
+    #     elif gesture == "pinch":
+    #         # Pinch activates the selected item
+    #         if os.path.isdir(filepath):
+    #             # If directory, enter it
+    #             success = self.navigate_directory("down")
+    #             return {
+    #                 "action": "navigate" if success else "error",
+    #                 "directory": filename,
+    #                 "path": filepath
+    #             }
+    #         else:
+    #             # If file, trigger file action (could be open, preview, etc.)
+    #             return {
+    #                 "action": "activate",
+    #                 "file": filename,
+    #                 "path": filepath,
+    #                 "extension": os.path.splitext(filename)[1].lower()[1:]
+    #             }
+        
+    #     return {"action": "none", "reason": "invalid_gesture"}
+    
     def process_selection_gesture(self, gesture):
         """
-        Process file selection gestures
+        Process file selection gestures with type-based handling
         gesture: "tap" (select) or "pinch" (activate)
         Returns: action taken and relevant information
         """
@@ -124,6 +165,7 @@ class GestureFileController:
             return {"action": "none", "reason": "no_selection"}
         
         filename, filepath = self.get_selected_file()
+        file_type = self.get_file_type(filepath)
         
         if gesture == "tap":
             # Tap just confirms selection - already handled by index
@@ -131,12 +173,13 @@ class GestureFileController:
                 "action": "select", 
                 "file": filename,
                 "path": filepath,
-                "type": "directory" if os.path.isdir(filepath) else "file"
+                "type": file_type['type'],
+                "extension": file_type.get('extension', '')
             }
             
         elif gesture == "pinch":
             # Pinch activates the selected item
-            if os.path.isdir(filepath):
+            if file_type['type'] == 'directory':
                 # If directory, enter it
                 success = self.navigate_directory("down")
                 return {
@@ -145,16 +188,20 @@ class GestureFileController:
                     "path": filepath
                 }
             else:
-                # If file, trigger file action (could be open, preview, etc.)
+                # If file, get preview based on type
+                preview_data = self.get_file_preview(filepath)
+                
                 return {
                     "action": "activate",
                     "file": filename,
                     "path": filepath,
-                    "extension": os.path.splitext(filename)[1].lower()[1:]
+                    "type": file_type['type'],
+                    "extension": file_type.get('extension', ''),
+                    "preview": preview_data
                 }
         
         return {"action": "none", "reason": "invalid_gesture"}
-    
+
     def get_directory_info(self):
         """Get current directory information"""
         return {
@@ -166,3 +213,121 @@ class GestureFileController:
             "can_go_back": self.history_position > 0,
             "can_go_forward": self.history_position < len(self.directory_history) - 1
         }
+    
+    def get_file_type(self, file_path):
+        """
+        Determine the type of file based on its extension.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Dictionary with file type information
+        """
+        if not os.path.exists(file_path):
+            return {'type': 'unknown', 'reason': 'File does not exist'}
+            
+        if os.path.isdir(file_path):
+            return {'type': 'directory'}
+            
+        # Get file extension (lowercase for consistency)
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        # Text files
+        if ext in ['.txt', '.md']:
+            return {'type': 'text', 'extension': ext[1:]}
+            
+        # Image files
+        if ext in ['.png', '.jpg', '.jpeg']:
+            return {'type': 'image', 'extension': ext[1:]}
+            
+        # PDF files
+        if ext == '.pdf':
+            return {'type': 'pdf', 'extension': 'pdf'}
+            
+        # Unknown file type
+        return {'type': 'unknown', 'extension': ext[1:] if ext else ''}
+    
+    def get_file_preview(self, file_path, max_size=10240):
+        """
+        Get a preview of file content based on file type.
+        
+        Args:
+            file_path: Path to the file
+            max_size: Maximum size of text content to return (bytes)
+            
+        Returns:
+            Dictionary with preview data
+        """
+        file_type = self.get_file_type(file_path)
+        
+        if file_type['type'] == 'unknown' or not os.path.exists(file_path):
+            return {
+                'status': 'error', 
+                'message': 'Cannot preview this file type or file does not exist'
+            }
+        
+        # Handle text files
+        if file_type['type'] == 'text':
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read(max_size)
+                    is_truncated = os.path.getsize(file_path) > max_size
+                    
+                    return {
+                        'status': 'success',
+                        'type': 'text',
+                        'content': content,
+                        'truncated': is_truncated
+                    }
+            except Exception as e:
+                return {'status': 'error', 'message': f"Error reading text file: {str(e)}"}
+        
+        # Handle image files - return path for frontend to display
+        elif file_type['type'] == 'image':
+            try:
+                # Verify it's a valid image file
+                import imghdr
+                img_type = imghdr.what(file_path)
+                
+                if img_type in ['jpeg', 'png']:
+                    # Return a URL path for the image viewer
+                    return {
+                        'status': 'success',
+                        'type': 'image',
+                        'image_type': img_type,
+                        'file_path': file_path,
+                        'size': os.path.getsize(file_path)
+                    }
+                else:
+                    return {
+                        'status': 'error', 
+                        'message': 'Invalid or unsupported image format'
+                    }
+            except Exception as e:
+                return {'status': 'error', 'message': f"Error processing image: {str(e)}"}
+        
+        # Handle PDFs
+        elif file_type['type'] == 'pdf':
+            file_size = os.path.getsize(file_path)
+            modified_time = os.path.getmtime(file_path)
+            
+            return {
+                'status': 'success',
+                'type': 'pdf',
+                'file_path': file_path,
+                'size': file_size,
+                'modified': modified_time,
+                'view_url': f'/api/view_pdf?path={file_path}'
+            }
+        
+        # For other file types, return basic info
+        return {
+            'status': 'info',
+            'message': f"Preview not supported for {file_type['type']} files",
+            'type': file_type['type'],
+            'size': os.path.getsize(file_path),
+            'modified': os.path.getmtime(file_path)
+        }
+    

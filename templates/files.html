@@ -281,12 +281,20 @@ function loadDirectory() {
                 fileList.innerHTML = '<div>No files found</div>';
             } else {
                 let html = '';
-                data.files.forEach((file, index) => { 
-                const isDir = data.files[index].indexOf('.') === -1;
-                const itemClass = "file-item ${isDir ? 'folder-icon' : 'file-icon'}${index === data.selected_index ? ' selected' : ''}"; 
-                html += `<div>  ${file} </div> `; });
-                fileList.innerHTML = html;      
+                data.files.forEach((file, index) => {
+                // Determine if it's a directory and get file extension
+                const fileExt = file.includes('.') ? file.split('.').pop().toLowerCase() : '';
+                const isDir = !fileExt; // Simple check - directories don't have extensions
 
+                    // Add file type info as data attributes
+                    const itemClass = `file-item ${isDir ? 'folder-icon' : 'file-icon'}${index === data.selected_index ? ' selected' : ''}`;
+                    html += `
+                <div>
+                            ${file}
+                </div>
+                `;
+                });
+                fileList.innerHTML = html;
                 // Update selected item
                 selectedIndex = data.selected_index;
                 updateSelectedInfo(data);
@@ -388,7 +396,49 @@ const gestureCooldown = 500; // ms cooldown between gesture processing
 
 function processGestures() {
     const currentTime = Date.now();
-    
+    if (data.selection_gesture === 'tap' || data.selection_gesture === 'pinch') {
+        fetch(`/api/process_selection?gesture=${data.selection_gesture}`)
+            .then(response => response.json())
+            .then(result => {
+                if (result.action === 'navigate') {
+                    loadDirectory(); // For directories
+                } else if (result.action === 'activate') {
+                    // File activation - handle based on type
+                    const fileInfo = {
+                        file: result.file,
+                        path: result.path,
+                        type: result.type,
+                        extension: result.extension
+                    };
+                    
+                    // Handle file based on type info
+                    if (result.preview) {
+                        // Directly use preview data if available
+                        if (result.type === 'text') {
+                            showTextPreview(fileInfo, result.preview);
+                        } else if (result.type === 'image') {
+                            showImagePreview(fileInfo, result.preview);
+                        } else if (result.type === 'pdf') {
+                            showPDFPreview(fileInfo, result.preview);
+                        } else {
+                            showGenericFileInfo(fileInfo, result.preview);
+                        }
+                    } else {
+                        // Otherwise request preview
+                        handleFileSelection(fileInfo);
+                    }
+                    
+                    // Highlight the selection with animation
+                    const selectedElement = document.querySelector(`.file-item[data-index="${result.directory.selected_index}"]`);
+                    if (selectedElement) {
+                        selectedElement.classList.add('activating');
+                        setTimeout(() => {
+                            selectedElement.classList.remove('activating');
+                        }, 500);
+                    }
+                }
+            });
+    }
     // Only check for new gestures after cooldown
     if (currentTime - lastGestureTime > gestureCooldown) {
         fetch('/api/gestures')

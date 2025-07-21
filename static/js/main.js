@@ -195,3 +195,207 @@ document.head.appendChild(validationStyles);
 document.addEventListener('DOMContentLoaded', function() {
     startGestureTracking();
 });
+
+function handleFileSelection(fileInfo) {
+    // Show loading state
+    document.getElementById('selected-file-info').innerHTML = `
+<div>
+        <div class="spinner-border text-primary" role="status">
+</div>
+        <p>Loading preview...
+</p>
+    </div>
+`;
+
+// Get file preview from server
+fetch(`/api/file/preview?path=${encodeURIComponent(fileInfo.path)}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'error') {
+            showFileError(data.message);
+            return;
+        }
+        
+        // Handle different file types
+        if (data.type === 'text') {
+            showTextPreview(fileInfo, data);
+        } else if (data.type === 'image') {
+            showImagePreview(fileInfo, data);
+        } else if (data.type === 'pdf') {
+            showPDFPreview(fileInfo, data);
+        } else {
+            showGenericFileInfo(fileInfo, data);
+        }
+    })
+    .catch(error => {
+        showFileError(`Error loading preview: ${error}`);
+    });
+}
+
+function showTextPreview(fileInfo, data) {
+// Create HTML for text preview
+let html = `
+
+<h5>
+${fileInfo.file}
+
+</h5>
+<div>
+<span>
+${fileInfo.extension} file
+
+</span>
+</div>
+<div>
+<pre>
+${escapeHtml(data.content)}
+
+</pre>
+</div>
+`;
+
+// Show truncation notice if needed
+if (data.truncated) {
+    html += `
+<div>
+<small>
+File is too large to show completely. Showing first 10KB.
+
+</small>
+</div>
+    `;
+}
+
+document.getElementById('selected-file-info').innerHTML = html;
+}
+
+function showImagePreview(fileInfo, data) {
+// Create HTML for image preview
+let html = `
+
+<h5>
+${fileInfo.file}
+
+</h5>
+<div>
+<span>
+${fileInfo.extension} image
+
+</span>
+</div>
+<div>
+        <img src="/api/file/image/${encodeURIComponent(data.file_path)}" 
+             class="img-fluid" style="max-height: 300px;" 
+             alt="${fileInfo.file}">
+</div>
+`;
+
+document.getElementById('selected-file-info').innerHTML = html;
+}
+
+function showPDFPreview(fileInfo, data) {
+// Create HTML for PDF preview with link to open viewer
+let html = `
+
+<h5>
+${fileInfo.file}
+
+</h5>
+<div>
+<span>
+PDF Document
+
+</span>
+</div>
+<div>
+<p>
+<i class="fas fa-file-pdf fa-4x text-danger"></i>
+
+</p>
+<p>
+PDF document (${formatFileSize(data.size)})
+
+</p>
+<a>
+<i class="fas fa-external-link-alt"></i>
+
+Open PDF Viewer
+
+</a>
+</div>
+`;
+
+document.getElementById('selected-file-info').innerHTML = html;
+}
+
+function showGenericFileInfo(fileInfo, data) {
+// Create HTML for generic file info
+let html = `
+
+<h5>
+${fileInfo.file}
+
+</h5>
+<div>
+<span>
+${fileInfo.extension || 'unknown'} file
+
+</span>
+</div>
+<div>
+<p>
+<i class="fas fa-file fa-3x text-secondary"></i>
+
+</p>
+<p>
+File type: ${data.type || 'Unknown'}
+
+</p>
+<p>
+${data.message || ''}
+
+</p>
+</div>
+`;
+
+document.getElementById('selected-file-info').innerHTML = html;
+}
+
+function showFileError(message) {
+let html = `
+
+<div>
+<h5>
+<i class="fas fa-exclamation-triangle"></i>
+
+Error
+
+</h5>
+<p>
+${message}
+
+</p>
+</div>
+`;
+
+document.getElementById('selected-file-info').innerHTML = html;
+}
+
+// Helper function to format file sizes
+function formatFileSize(bytes) {
+if (bytes === 0) return '0 Bytes';
+const k = 1024;
+const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+const i = Math.floor(Math.log(bytes) / Math.log(k));
+return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+return unsafe
+.replace(/&/g, "&")
+.replace(/</g, "<")
+.replace(/>/g, ">")
+.replace(/"/g, "\"")
+.replace(/'/g, "'");
+}

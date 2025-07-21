@@ -1,0 +1,50 @@
+<!-- templates/pdf_viewer.html -->
+{% extends "base.html" %}
+
+{% block title %}PDF Viewer - GestureDrive{% endblock %}
+
+{% block content %}
+<div>
+<h1>
+PDF Viewer
+
+</h1>
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+<h5>
+{{ pdf_path.split('/')[-1] }}
+
+</h5>
+<button>
+<i class="fas fa-arrow-left"></i>
+
+Back
+
+</button>
+</div>
+<div>
+                <div class="ratio ratio-16x9" style="min-height: 800px;">
+                    <embed src="/api/file/serve_pdf?path={{ pdf_path }}" 
+                           type="application/pdf" 
+                           width="100%" 
+                           height="100%">
+</div>
+            </div>
+<div>
+<small>
+If the PDF doesn't display correctly, you can
+
+<a>
+download it
+
+</a>
+instead.
+
+</small>
+</div>
+        </div>
+    </div>
+</div>
+</div> {% endblock %}
