@@ -51,6 +51,27 @@ Loading...
 
 </span>
 </div>
+<div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>
+    Selection Viewport
+    
+    </h5>
+    <span>
+    Position: 0/0
+    
+    </span>
+    </div>
+    <div>
+        <div class="viewport-container position-relative bg-light" style="height: 150px; overflow: hidden;">
+            <!-- Visual indicator for cursor position -->
+            <div id="gesture-cursor" class="position-absolute" style="width: 20px; height: 20px; border-radius: 50%; background-color: rgba(0, 123, 255, 0.7); pointer-events: none; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);">
+    </div>
+            <!-- File items will be dynamically rendered here -->
+    <div id="viewport-items" class="d-flex position-relative" style="height: 100%;"></div>
+        </div>
+    </div>
+    </div> 
 <p>
 Loading files...
 
@@ -250,6 +271,100 @@ animation: badge-pulse 1s;
 {% block scripts %}
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize viewport
+    initViewport();
+    
+    // Rest of initialization code...
+    loadDirectory();
+    processGestures();
+    
+    // Initialize the gesture processor
+    fetch('/start_gesture_processor')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Gesture processor status:', data.status);
+        })
+        .catch(err => console.error('Error starting gesture processor:', err));
+});
+
+function setupViewportInteraction() {
+    const viewport = document.querySelector('.viewport-container');
+    if (!viewport) return;
+    
+    // Mouse events for testing without gestures
+    viewport.addEventListener('mousemove', (e) => {
+        const rect = viewport.getBoundingClientRect();
+        const relativeX = e.clientX - rect.left;
+        const relativeY = e.clientY - rect.top;
+        
+        // Position cursor to follow mouse
+        const cursor = document.getElementById('gesture-cursor');
+        cursor.style.left = `${relativeX}px`;
+        cursor.style.top = `${relativeY}px`;
+        cursor.style.display = 'block';
+        
+        // Determine which item the mouse is hovering over
+        const itemWidth = rect.width / visibleItemsCount;
+        const hoveredItemIndex = Math.floor(relativeX / itemWidth);
+        
+        // Map viewport position to actual file index
+        const halfVisible = Math.floor(visibleItemsCount / 2);
+        const startIdx = Math.max(0, currentViewportIndex - halfVisible);
+        const actualIndex = startIdx + hoveredItemIndex;
+        
+        // Highlight hovered item
+        if (actualIndex >= 0 && actualIndex < viewportItems.length) {
+            highlightViewportItem(actualIndex);
+        }
+    });
+    
+    viewport.addEventListener('mouseleave', () => {
+        // Hide cursor when mouse leaves viewport
+        const cursor = document.getElementById('gesture-cursor');
+        cursor.style.display = 'none';
+        
+        // Remove all hover highlights
+        document.querySelectorAll('.viewport-item.hover').forEach(item => {
+            item.classList.remove('hover');
+        });
+    });
+    
+    viewport.addEventListener('click', (e) => {
+        const rect = viewport.getBoundingClientRect();
+        const relativeX = e.clientX - rect.left;
+        
+        // Determine which item was clicked
+        const itemWidth = rect.width / visibleItemsCount;
+        const clickedItemIndex = Math.floor(relativeX / itemWidth);
+        
+        // Map viewport position to actual file index
+        const halfVisible = Math.floor(visibleItemsCount / 2);
+        const startIdx = Math.max(0, currentViewportIndex - halfVisible);
+        const actualIndex = startIdx + clickedItemIndex;
+        
+        // Select the clicked item
+        if (actualIndex >= 0 && actualIndex < viewportItems.length) {
+            fetch(`/api/select?action=select&index=${actualIndex}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateSelectedInfo(data.directory);
+                        showGestureFeedback(e.clientX, e.clientY, 'select');
+                    }
+                });
+        }
+    });
+    
+    // Add viewport interaction to initialization
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize viewport interaction 
+        setupViewportInteraction();
+        
+        // Rest of initialization...
+    });
+}
+
 // JavaScript for file browser interaction
 document.addEventListener('DOMContentLoaded', function() {
 // Elements
@@ -309,17 +424,39 @@ function loadDirectory() {
         }
 
 // Update selected file information
+// function updateSelectedInfo(data) {
+//     if (data.selected_index >= 0 && data.files.length > data.selected_index) {
+//         const selectedFile = data.files[data.selected_index];
+//         const fullPath = `${data.current_directory}/${selectedFile}`;
+        
+//         // Determine if it's a file or directory
+//         const isDir = selectedFile.indexOf('.') === -1; // Simple check, improve as needed
+        
+//         let html = `<h5> ${selectedFile}  </h5> <p> <strong> Path:  </strong> ${fullPath} </p> <p> <strong> Type: </strong> ${isDir ? 'Directory' : 'File'} </p>`;
+        
+//         selectedFileInfo.innerHTML = html;
+        
+//         // Highlight selected item in list
+//         document.querySelectorAll('.file-item').forEach(item => {
+//             item.classList.remove('selected');
+//         });
+        
+//         const selectedElement = document.querySelector(`.file-item[data-index="${data.selected_index}"]`);
+//         if (selectedElement) {
+//             selectedElement.classList.add('selected');
+//             // Scroll into view if needed
+//             selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+//         }
+//     } else {
+//         selectedFileInfo.innerHTML = '<p>No file selected</p>';}
+// }
+
 function updateSelectedInfo(data) {
     if (data.selected_index >= 0 && data.files.length > data.selected_index) {
         const selectedFile = data.files[data.selected_index];
         const fullPath = `${data.current_directory}/${selectedFile}`;
         
-        // Determine if it's a file or directory
-        const isDir = selectedFile.indexOf('.') === -1; // Simple check, improve as needed
-        
-        let html = `<h5> ${selectedFile}  </h5> <p> <strong> Path:  </strong> ${fullPath} </p> <p> <strong> Type: </strong> ${isDir ? 'Directory' : 'File'} </p>`;
-        
-        selectedFileInfo.innerHTML = html;
+        // ... existing code for selectedFileInfo ...
         
         // Highlight selected item in list
         document.querySelectorAll('.file-item').forEach(item => {
@@ -332,9 +469,15 @@ function updateSelectedInfo(data) {
             // Scroll into view if needed
             selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
+        
+        // Sync with viewport - IMPORTANT ADDITION
+        scrollViewportTo(data.selected_index);
     } else {
-        selectedFileInfo.innerHTML = '<p>No file selected</p>';}
+        selectedFileInfo.innerHTML = ' <p> No file selected  </p> ';
 }
+}
+
+
 
 // Click handlers for navigation buttons
 backBtn.addEventListener('click', () => {
@@ -497,6 +640,407 @@ loadDirectory();
 processGestures();
 });
 
+let viewportItems = [];
+let currentViewportIndex = 0;
+let visibleItemsCount = 5; // Number of items visible in viewport
+let viewportAnimating = false;
+
+// Initialize viewport
+function initViewport() {
+    // Initial viewport setup
+    updateViewportPosition();
+    
+    // Set up a listener for window resizing
+    window.addEventListener('resize', () => {
+        updateVisibleItemsCount();
+        renderViewport();
+    });
+    
+    // Initial calculation of visible items
+    updateVisibleItemsCount();
+}
+
+// Calculate how many items fit in the viewport
+function updateVisibleItemsCount() {
+    const containerWidth = document.querySelector('.viewport-container').offsetWidth;
+    visibleItemsCount = Math.max(3, Math.floor(containerWidth / 120));
+    // Ensure we always have an odd number for centering
+    if (visibleItemsCount % 2 === 0) visibleItemsCount--;
+}
+
+// Update viewport with current files
+function updateViewport(files, selectedIndex) {
+    viewportItems = files || [];
+    currentViewportIndex = selectedIndex;
+    renderViewport();
+    updateViewportPosition();
+}
+
+// Render items in the viewport
+function renderViewport() {
+    const viewportEl = document.getElementById('viewport-items');
+    if (!viewportEl) return;
+    
+    // Get start and end indices for visible items
+    const halfVisible = Math.floor(visibleItemsCount / 2);
+    let startIdx = Math.max(0, currentViewportIndex - halfVisible);
+    let endIdx = Math.min(viewportItems.length - 1, startIdx + visibleItemsCount - 1);
+    
+    // Adjust start if we can't fill from the end
+    if (endIdx - startIdx + 1 < visibleItemsCount && startIdx > 0) {
+        startIdx = Math.max(0, endIdx - visibleItemsCount + 1);
+    }
+    
+    // Clear current viewport
+    viewportEl.innerHTML = '';
+    
+    // Calculate item width
+    const itemWidth = 100 / visibleItemsCount;
+    
+    // Add items
+    for (let i = startIdx; i <= endIdx; i++) {
+        const filename = viewportItems[i];
+        const isSelected = i === currentViewportIndex;
+        const isDir = !filename.includes('.');
+        const fileExt = isDir ? '' : filename.split('.').pop().toLowerCase();
+        
+        // Determine icon based on file type
+        let iconClass = 'fas fa-file icon icon-file';
+        if (isDir) {
+            iconClass = 'fas fa-folder icon icon-folder';
+        } else if (['txt', 'md'].includes(fileExt)) {
+            iconClass = 'fas fa-file-alt icon icon-text';
+        } else if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExt)) {
+            iconClass = 'fas fa-image icon icon-image';
+        } else if (fileExt === 'pdf') {
+            iconClass = 'fas fa-file-pdf icon icon-pdf';
+        } else if (['mp3', 'wav', 'ogg'].includes(fileExt)) {
+            iconClass = 'fas fa-file-audio icon icon-audio';
+        } else if (['mp4', 'mov', 'avi'].includes(fileExt)) {
+            iconClass = 'fas fa-file-video icon icon-video';
+        }
+        
+        // Create item element
+        const itemEl = document.createElement('div');
+        itemEl.className = `viewport-item${isSelected ? ' selected' : ''}`;
+        itemEl.style.width = `${itemWidth}%`;
+        itemEl.dataset.index = i;
+        itemEl.innerHTML = `
+<i class="${iconClass}"></i>
+
+<div>
+${filename}
+
+</div>
+    `;
+    
+    // Add to viewport
+    viewportEl.appendChild(itemEl);
+}
+
+// Position viewport to center the selected item
+const translateX = -((currentViewportIndex - startIdx) / visibleItemsCount) * 100;
+viewportEl.style.transform = `translateX(${translateX}%)`;
+
+// Update viewport position indicator
+updateViewportPosition();
+}
+
+// Update the position indicator
+function updateViewportPosition() {
+const posIndicator = document.getElementById('viewport-position');
+if (posIndicator && viewportItems.length > 0) {
+posIndicator.textContent = `Position: ${currentViewportIndex + 1}/${viewportItems.length}`;
+} else if (posIndicator) {
+posIndicator.textContent = 'No items';
+}
+}
+
+// Scroll viewport to selected index
+function scrollViewportTo(index, animate = true) {
+if (index < 0 || index >= viewportItems.length || viewportAnimating) return;
+
+currentViewportIndex = index;
+
+// Don't animate if animate is false
+if (!animate) {
+    renderViewport();
+    return;
+}
+
+// Otherwise, apply animation class
+viewportAnimating = true;
+
+// First update selection
+const items = document.querySelectorAll('.viewport-item');
+items.forEach(item => {
+    const itemIndex = parseInt(item.dataset.index);
+    if (itemIndex === index) {
+        item.classList.add('selected');
+    } else {
+        item.classList.remove('selected');
+    }
+});
+
+// Then re-render after animation finishes
+setTimeout(() => {
+    renderViewport();
+    viewportAnimating = false;
+}, 300);
+}
+
+// Show gesture feedback animation in the viewport
+function showGestureFeedback(x, y, action) {
+const cursor = document.getElementById('gesture-cursor');
+const viewport = document.querySelector('.viewport-container');
+
+if (!cursor || !viewport) return;
+
+// Convert global coordinates to viewport-relative
+const rect = viewport.getBoundingClientRect();
+const relativeX = Math.max(0, Math.min(rect.width, x - rect.left));
+const relativeY = Math.max(0, Math.min(rect.height, y - rect.top));
+
+// Position cursor
+cursor.style.left = `${relativeX}px`;
+cursor.style.top = `${relativeY}px`;
+
+// Show cursor
+cursor.style.display = 'block';
+
+// Add action-specific styles
+cursor.classList.remove('action-select', 'action-activate');
+if (action === 'select') {
+    cursor.style.backgroundColor = 'rgba(0, 123, 255, 0.7)';
+    cursor.classList.add('action-select');
+} else if (action === 'activate') {
+    cursor.style.backgroundColor = 'rgba(40, 167, 69, 0.7)';
+    cursor.classList.add('action-activate');
+}
+
+// Add animation
+cursor.classList.add('gesture-cursor-active');
+
+// Remove animation class after animation completes
+setTimeout(() => {
+    cursor.classList.remove('gesture-cursor-active');
+}, 500);
+}
+
+// Track hand position in the viewport
+function trackHandInViewport(handX, handY) {
+const cursor = document.getElementById('gesture-cursor');
+const viewport = document.querySelector('.viewport-container');
+
+if (!cursor || !viewport) return;
+
+// Convert normalized hand coordinates to viewport-relative
+const viewportRect = viewport.getBoundingClientRect();
+const relativeX = handX * window.innerWidth;
+const relativeY = handY * window.innerHeight;
+
+// Check if hand is in viewport
+if (relativeX >= viewportRect.left && relativeX <= viewportRect.right &&
+    relativeY >= viewportRect.top && relativeY <= viewportRect.bottom) {
+    
+    // Position cursor relative to viewport
+    const viewportX = relativeX - viewportRect.left;
+    const viewportY = relativeY - viewportRect.top;
+    
+    cursor.style.left = `${viewportX}px`;
+    cursor.style.top = `${viewportY}px`;
+    cursor.style.display = 'block';
+    
+    // Determine which item the hand is hovering over
+    const itemWidth = viewportRect.width / visibleItemsCount;
+    const hoveredItemIndex = Math.floor(viewportX / itemWidth);
+    
+    // Map viewport position to actual file index
+    const halfVisible = Math.floor(visibleItemsCount / 2);
+    const startIdx = Math.max(0, currentViewportIndex - halfVisible);
+    const actualIndex = startIdx + hoveredItemIndex;
+    
+    // Highlight hovered item
+    if (actualIndex >= 0 && actualIndex < viewportItems.length) {
+        highlightViewportItem(actualIndex);
+    }
+    
+    return true;
+} else {
+    // Hide cursor when hand is outside viewport
+    cursor.style.display = 'none';
+    return false;
+}
+}
+
+// Highlight item in viewport without changing selection
+function highlightViewportItem(index) {
+const items = document.querySelectorAll('.viewport-item');
+items.forEach(item => {
+const itemIndex = parseInt(item.dataset.index);
+if (itemIndex === index) {
+item.classList.add('hover');
+} else {
+item.classList.remove('hover');
+}
+});
+}
+
+function loadDirectory() {
+    fetch('/api/directory')
+        .then(response => response.json())
+        .then(data => {
+            // Update path display
+            currentPath.textContent = data.current_directory;
+            
+            // Generate file list HTML
+            if (data.files.length === 0) {
+                fileList.innerHTML = '<div> No files found  </div> ';
+} else {
+let html = '';
+data.files.forEach((file, index) => {
+const isDir = file.indexOf('.') === -1; // Simple check, improve as needed
+const fileExt = !isDir ? file.split('.').pop().toLowerCase() : '';
+const itemClass = `file-item ${isDir ? 'folder-icon' : 'file-icon'}${index === data.selected_index ? ' selected' : ''}`;
+
+                // Add data attributes for file type
+                html += `<div>${file}</div>`;});
+fileList.innerHTML = html;
+
+            // Update selected item
+            selectedIndex = data.selected_index;
+            updateSelectedInfo(data);
+            
+            // Sync with viewport - IMPORTANT ADDITION
+            updateViewport(data.files, data.selected_index);
+        }
+        
+        // Update navigation button states
+        backBtn.disabled = !data.can_go_back;
+        upBtn.disabled = !data.can_go_up;
+    })
+    .catch(error => {
+        console.error('Error loading directory:', error);
+        fileList.innerHTML = '<div> Error loading directory contents </div> ';
+});
+}
+
+function processGestures() {
+    const currentTime = Date.now();
+    
+    // Only check for new gestures after cooldown
+    if (currentTime - lastGestureTime > gestureCooldown) {
+        fetch('/api/gestures')
+            .then(response => response.json())
+            .then(data => {
+                // Update gesture displays
+                updateGestureDisplay(data.gesture, currentGesture);
+                updateGestureDisplay(data.motion, currentMotion);
+                updateGestureDisplay(data.selection_gesture, selectionGesture);
+                
+                // Get hand landmark data for position tracking
+                fetch('/api/hand_position')
+                    .then(response => response.json())
+                    .then(positionData => {
+                        if (positionData.visible) {
+                            // Track hand in viewport
+                            trackHandInViewport(positionData.x, positionData.y);
+                        }
+                    })
+                    .catch(err => console.error('Error fetching hand position:', err));
+                
+                // Process selection gesture with visual feedback
+                if (data.selection_gesture) {
+                    fetch(`/api/process_selection?gesture=${data.selection_gesture}`)
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.action === 'navigate' || result.action === 'activate') {
+                                // Show gesture feedback
+                                const viewportRect = document.querySelector('.viewport-container').getBoundingClientRect();
+                                const feedbackX = viewportRect.left + (viewportRect.width / 2);
+                                const feedbackY = viewportRect.top + (viewportRect.height / 2);
+                                showGestureFeedback(feedbackX, feedbackY, result.action);
+                                
+                                // Handle navigation or file preview...
+                                // ... (existing code) ...
+                                loadDirectory();
+                            } else if (result.action === 'select') {
+                                // ... (existing code) ...
+                                
+                                // Show select gesture feedback
+                                const selectedElement = document.querySelector(`.file-item[data-index="${result.directory.selected_index}"]`);
+                                if (selectedElement) {
+                                    const rect = selectedElement.getBoundingClientRect();
+                                    showGestureFeedback(rect.left + rect.width/2, rect.top + rect.height/2, 'select');
+                                    
+                                    // Also sync viewport
+                                    scrollViewportTo(result.directory.selected_index);
+                                }
+                            }
+                        });
+                        
+                    lastGestureTime = currentTime;
+                }
+                
+                // Process motion for navigation with visual feedback
+                if (data.motion !== 'stationary' && data.motion !== null) {
+                    let navAction = null;
+                    
+                    if (data.motion === 'swipe_up') {
+                        navAction = 'previous';
+                    } else if (data.motion === 'swipe_down') {
+                        navAction = 'next';
+                    } else if (data.motion === 'swipe_left') {
+                        navAction = 'up';
+                    } else if (data.motion === 'swipe_right') {
+                        navAction = 'down';
+                    }
+                    
+                    if (navAction) {
+                        // Show gesture visual feedback
+                        const viewportRect = document.querySelector('.viewport-container').getBoundingClientRect();
+                        let feedbackX, feedbackY;
+                        
+                        // Position feedback based on direction
+                        if (navAction === 'previous' || navAction === 'next') {
+                            feedbackX = viewportRect.left + (viewportRect.width / 2);
+                            feedbackY = viewportRect.top + (navAction === 'previous' ? viewportRect.height * 0.25 : viewportRect.height * 0.75);
+                        } else {
+                            feedbackX = viewportRect.left + (navAction === 'up' ? viewportRect.width * 0.25 : viewportRect.width * 0.75);
+                            feedbackY = viewportRect.top + (viewportRect.height / 2);
+                        }
+                        
+                        showGestureFeedback(feedbackX, feedbackY, 'select');
+                        
+                        // Execute navigation
+                        if (navAction === 'previous' || navAction === 'next') {
+                            fetch(`/api/select?action=${navAction}`)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        updateSelectedInfo(data.directory);
+                                    }
+                                });
+                        } else {
+                            fetch(`/api/navigate?direction=${navAction}`)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        loadDirectory();
+                                    }
+                                });
+                        }
+                        
+                        lastGestureTime = currentTime;
+                    }
+                }
+            })
+            .catch(error => console.error('Error fetching gestures:', error));
+    }
+    
+    // Continue the loop
+    requestAnimationFrame(processGestures);
+}
 </script>
 {% endblock %}
 

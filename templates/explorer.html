@@ -1,0 +1,933 @@
+{% extends "base.html" %}
+
+{% block title %}GestureDrive - File Explorer{% endblock %}
+
+{% block content %}
+<div>
+<!-- Main content with camera feed and overlay -->
+<div class="camera-view-container">
+    <!-- Camera feed -->
+    <div class="camera-feed">
+        <img src="{{ url_for('video_feed') }}" alt="Camera Feed" id="camera-feed">
+</div>
+    <!-- Gesture cursor overlay -->
+<div class="gesture-cursor" id="gesture-cursor"></div>
+    <!-- Directory path bar -->
+<div>
+        <div class="current-path" id="current-path">/
+</div>
+    </div>
+    
+    <!-- Status message bar -->
+<div>
+        <div id="status-message">Welcome to GestureDrive File Explorer
+</div>
+    </div>
+    
+    <!-- Gesture instruction panel -->
+<div>
+<h6>
+Gesture Controls:
+
+</h6>
+        <div class="instruction">
+            <div class="gesture-icon">👆
+</div>
+<div>
+Point Up: Select Previous
+
+</div>
+        </div>
+<div>
+            <div class="gesture-icon">👇
+</div>
+<div>
+Point Down: Select Next
+
+</div>
+        </div>
+<div>
+            <div class="gesture-icon">👈
+</div>
+<div>
+Point Left: Go Up Directory
+
+</div>
+        </div>
+<div>
+            <div class="gesture-icon">👉
+</div>
+<div>
+Point Right: Enter Directory/Open File
+
+</div>
+        </div>
+<div>
+            <div class="gesture-icon">✋
+</div>
+<div>
+Open Palm: Refresh
+
+</div>
+        </div>
+<div>
+            <div class="gesture-icon">👌
+</div>
+<div>
+Pinch: Select File
+
+</div>
+        </div>
+<div>
+            <div class="gesture-icon">👋
+</div>
+<div>
+Tap: Preview File
+
+</div>
+        </div>
+    </div>
+</div>
+
+<!-- File browser panel -->
+<div>
+    <div class="panel-header">
+<h5>
+File Explorer
+
+</h5>
+</div>
+<div>
+        <!-- Files will be loaded here dynamically -->
+        <div class="loading">Loading files...
+</div>
+    </div>
+<div>
+        <div id="selection-info">
+<span>
+0/0
+
+</span>
+</div>
+    </div>
+</div>
+</div> <!-- File preview modal -->
+<div>
+<div class="modal-dialog modal-lg">
+    <div class="modal-content">
+        <div class="modal-header">
+<h5>
+File Preview
+
+</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+</div>
+<div>
+            <!-- Preview content will be loaded here -->
+</div>
+<div>
+<button>
+Close
+
+</button>
+<button>
+Open
+
+</button>
+</div>
+    </div>
+</div>
+</div>
+<style>
+/* Explorer layout /
+.explorer-container {
+display: flex;
+height: calc(100vh - 56px); / Adjust for navbar height */
+background-color: #212529;
+position: relative;
+}
+
+/* Camera view area */
+.camera-view-container {
+flex: 1;
+position: relative;
+overflow: hidden;
+background-color: #000;
+}
+
+.camera-feed {
+width: 100%;
+height: 100%;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+
+.camera-feed img {
+max-width: 100%;
+max-height: 100%;
+object-fit: contain;
+}
+
+/* Gesture cursor */
+.gesture-cursor {
+position: absolute;
+width: 30px;
+height: 30px;
+border-radius: 50%;
+background-color: rgba(0, 123, 255, 0.6);
+box-shadow: 0 0 15px rgba(0, 123, 255, 0.8);
+pointer-events: none;
+transform: translate(-50%, -50%);
+z-index: 100;
+display: none;
+}
+
+.gesture-cursor.select {
+background-color: rgba(0, 123, 255, 0.8);
+}
+
+.gesture-cursor.activate {
+background-color: rgba(40, 167, 69, 0.8);
+}
+
+/* Directory path bar */
+.directory-bar {
+position: absolute;
+top: 0;
+left: 0;
+right: 0;
+height: 40px;
+background-color: rgba(50, 50, 50, 0.9);
+display: flex;
+align-items: center;
+padding: 0 15px;
+color: white;
+z-index: 10;
+backdrop-filter: blur(5px);
+}
+
+.current-path {
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+font-family: monospace;
+font-size: 14px;
+}
+
+/* Status message bar */
+.status-bar {
+position: absolute;
+bottom: 0;
+left: 0;
+right: 0;
+height: 40px;
+background-color: rgba(50, 50, 50, 0.9);
+display: flex;
+align-items: center;
+padding: 0 15px;
+color: white;
+z-index: 10;
+backdrop-filter: blur(5px);
+}
+
+/* Gesture instructions */
+.gesture-instructions {
+position: absolute;
+bottom: 50px;
+left: 10px;
+width: 230px;
+background-color: rgba(50, 50, 50, 0.8);
+padding: 10px;
+border-radius: 5px;
+color: white;
+z-index: 20;
+backdrop-filter: blur(5px);
+}
+
+.gesture-instructions h6 {
+margin-bottom: 10px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+padding-bottom: 5px;
+}
+
+.instruction {
+display: flex;
+align-items: center;
+margin-bottom: 8px;
+}
+
+.gesture-icon {
+font-size: 20px;
+width: 30px;
+text-align: center;
+margin-right: 10px;
+}
+
+.gesture-desc {
+font-size: 13px;
+}
+
+/* File browser panel */
+.file-panel {
+width: 300px;
+background-color: #343a40;
+color: white;
+display: flex;
+flex-direction: column;
+border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-header {
+padding: 10px 15px;
+background-color: #495057;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-header h5 {
+margin: 0;
+font-size: 16px;
+}
+
+.file-list {
+flex: 1;
+overflow-y: auto;
+}
+
+.file-item {
+padding: 10px 15px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+display: flex;
+align-items: center;
+transition: background-color 0.2s;
+}
+
+.file-item:hover {
+background-color: rgba(255, 255, 255, 0.05);
+}
+
+.file-item.selected {
+background-color: rgba(0, 123, 255, 0.3);
+}
+
+.file-item .icon {
+margin-right: 10px;
+font-size: 20px;
+width: 25px;
+text-align: center;
+}
+
+.file-item .name {
+flex: 1;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.panel-footer {
+padding: 8px 15px;
+background-color: #495057;
+border-top: 1px solid rgba(255, 255, 255, 0.1);
+font-size: 14px;
+}
+
+/* Loading animation */
+.loading {
+display: flex;
+justify-content: center;
+align-items: center;
+height: 100px;
+color: rgba(255, 255, 255, 0.5);
+}
+
+/* File type icons */
+.icon-folder { color: #ffc107; }
+.icon-text { color: #adb5bd; }
+.icon-image { color: #28a745; }
+.icon-pdf { color: #dc3545; }
+.icon-audio { color: #6f42c1; }
+.icon-video { color: #fd7e14; }
+.icon-file { color: #adb5bd; }
+
+/* Gesture message animation */
+.gesture-message {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+background-color: rgba(0, 0, 0, 0.7);
+color: white;
+padding: 15px 30px;
+border-radius: 30px;
+font-size: 20px;
+z-index: 1000;
+display: none;
+}
+
+.gesture-message.show {
+display: block;
+animation: fadeInOut 1.5s;
+}
+
+@keyframes fadeInOut {
+0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+}
+
+/* File selection animation */
+.file-item.activating {
+animation: file-pulse 0.5s;
+}
+
+@keyframes file-pulse {
+0% { background-color: rgba(0, 123, 255, 0.3); }
+50% { background-color: rgba(40, 167, 69, 0.5); }
+100% { background-color: rgba(0, 123, 255, 0.3); }
+}
+
+</style>
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+// DOM elements
+const fileList = document.getElementById('file-list');
+const currentPath = document.getElementById('current-path');
+const statusMessage = document.getElementById('status-message');
+const selectionPosition = document.getElementById('selection-position');
+const gestureCursor = document.getElementById('gesture-cursor');
+
+// State variables
+let selectedIndex = -1;
+let fileItems = [];
+let lastGestureTime = 0;
+const gestureCooldown = 500; // ms cooldown between gesture processing
+
+// Initialize file explorer
+loadDirectory();
+
+// Start gesture processor
+fetch('/start_gesture_processor')
+    .then(response => response.json())
+    .then(data => {
+        console.log('Gesture processor status:', data.status);
+    })
+    .catch(err => console.error('Error starting gesture processor:', err));
+
+// Start gesture and hand position tracking
+startGestureProcessing();
+
+// Load directory contents
+function loadDirectory() {
+    fileList.innerHTML = '
+<div>
+Loading files...
+
+</div>
+';
+
+    fetch('/api/directory')
+        .then(response => response.json())
+        .then(data => {
+            // Update path display
+            currentPath.textContent = data.current_directory;
+            
+            // Update file list
+            renderFileList(data);
+            
+            // Update selection information
+            updateSelectionInfo(data);
+        })
+        .catch(error => {
+            console.error('Error loading directory:', error);
+            fileList.innerHTML = `
+<div>
+Error: ${error.message}
+
+</div>
+`;
+showStatusMessage('Failed to load directory', 'error');
+});
+}
+
+// Render file list
+function renderFileList(data) {
+    const files = data.files || [];
+    fileItems = files;
+    
+    if (files.length === 0) {
+        fileList.innerHTML = '
+<div>
+No files in this directory
+
+</div>
+';
+return;
+}
+
+    let html = '';
+    files.forEach((file, index) => {
+        // Get file extension if applicable
+        const isDir = !file.includes('.');
+        const fileExt = isDir ? '' : file.split('.').pop().toLowerCase();
+        
+        // Determine icon based on file type
+        let iconClass = 'fas fa-file icon icon-file';
+        if (isDir) {
+            iconClass = 'fas fa-folder icon icon-folder';
+        } else if (['txt', 'md'].includes(fileExt)) {
+            iconClass = 'fas fa-file-alt icon icon-text';
+        } else if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExt)) {
+            iconClass = 'fas fa-image icon icon-image';
+        } else if (fileExt === 'pdf') {
+            iconClass = 'fas fa-file-pdf icon icon-pdf';
+        } else if (['mp3', 'wav', 'ogg'].includes(fileExt)) {
+            iconClass = 'fas fa-file-audio icon icon-audio';
+        } else if (['mp4', 'mov', 'avi'].includes(fileExt)) {
+            iconClass = 'fas fa-file-video icon icon-video';
+        }
+        
+        // Set selected class if this is the selected item
+        const isSelected = index === data.selected_index;
+        const selectedClass = isSelected ? ' selected' : '';
+        
+        html += `
+<div>
+                <div class="icon">
+<i class="${iconClass}"></i>
+
+</div>
+<div>
+${file}
+
+</div>
+            </div>
+        `;
+    });
+    
+    fileList.innerHTML = html;
+    
+    // Add click handlers for mouse navigation
+    document.querySelectorAll('.file-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            selectItem(index);
+        });
+        
+        item.addEventListener('dblclick', function() {
+            const index = parseInt(this.dataset.index);
+            activateItem(index);
+        });
+    });
+}
+
+// Update selection info
+function updateSelectionInfo(data) {
+    selectedIndex = data.selected_index;
+    
+    // Update position indicator
+    if (fileItems.length > 0 && selectedIndex >= 0) {
+        selectionPosition.textContent = `${selectedIndex + 1}/${fileItems.length}`;
+    } else {
+        selectionPosition.textContent = '0/0';
+    }
+    
+    // Ensure selected item is visible
+    const selectedItem = document.querySelector('.file-item.selected');
+    if (selectedItem) {
+        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+}
+
+// Select a file/directory item
+function selectItem(index) {
+    if (index < 0 || index >= fileItems.length) return;
+    
+    fetch(`/api/select?action=select&index=${index}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update UI with new selection
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                
+                const newSelectedItem = document.querySelector(`.file-item[data-index="${index}"]`);
+                if (newSelectedItem) {
+                    newSelectedItem.classList.add('selected');
+                }
+                
+                // Update selection info
+                updateSelectionInfo(data.directory);
+            }
+        })
+        .catch(error => {
+            console.error('Error selecting item:', error);
+            showStatusMessage('Failed to select item', 'error');
+        });
+}
+
+// Activate a file/directory item (enter directory or open file)
+function activateItem(index) {
+    if (index < 0 || index >= fileItems.length) return;
+    
+    const itemEl = document.querySelector(`.file-item[data-index="${index}"]`);
+    if (!itemEl) return;
+    
+    const isDir = itemEl.dataset.type === 'directory';
+    
+    if (isDir) {
+        // Navigate into directory
+        fetch(`/api/navigate?direction=down`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadDirectory();
+                    showStatusMessage('Entered directory', 'success');
+                } else {
+                    showStatusMessage('Failed to enter directory', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error navigating directory:', error);
+                showStatusMessage('Navigation error', 'error');
+            });
+    } else {
+        // Process file based on type
+        const filePath = itemEl.dataset.path;
+        const fileExt = itemEl.dataset.extension;
+        
+        fetch(`/api/process_selection?gesture=pinch`)
+            .then(response => response.json())
+            .then(result => {
+                if (result.action === 'activate') {
+                    showStatusMessage(`Opening ${result.file}`, 'success');
+                    
+                    // Handle preview based on file type
+                    if (result.type === 'text') {
+                        showTextPreview(result);
+                    } else if (result.type === 'image') {
+                        showImagePreview(result);
+                    } else if (result.type === 'pdf') {
+                        showPDFPreview(result);
+                    } else {
+                        showGenericFileInfo(result);
+                    }
+                } else {
+                    showStatusMessage('Could not open file', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error activating file:', error);
+                showStatusMessage('File activation error', 'error');
+            });
+    }
+}
+
+// Show status message
+function showStatusMessage(message, type = 'info') {
+    statusMessage.textContent = message;
+    
+    // Remove previous classes
+    statusMessage.classList.remove('text-success', 'text-danger', 'text-info');
+    
+    // Add appropriate class
+    if (type === 'success') {
+        statusMessage.classList.add('text-success');
+    } else if (type === 'error') {
+        statusMessage.classList.add('text-danger');
+    } else {
+        statusMessage.classList.add('text-info');
+    }
+}
+
+// Process gestures for navigation
+function startGestureProcessing() {
+    // Create a floating gesture message element
+    const gestureMessageEl = document.createElement('div');
+    gestureMessageEl.className = 'gesture-message';
+    document.querySelector('.camera-view-container').appendChild(gestureMessageEl);
+    
+    function processGestures() {
+        const currentTime = Date.now();
+        
+        // Only check for new gestures after cooldown
+        if (currentTime - lastGestureTime > gestureCooldown) {
+            Promise.all([
+                fetch('/api/gestures').then(res => res.json()),
+                fetch('/api/hand_position').then(res => res.json())
+            ]).then(([gestureData, positionData]) => {
+                // Update cursor position if hand is visible
+                if (positionData.visible) {
+                    updateCursorPosition(positionData.x, positionData.y);
+                } else {
+                    gestureCursor.style.display = 'none';
+                }
+                
+                // Process gesture inputs for navigation
+                const gesture = gestureData.gesture;
+                const motion = gestureData.motion;
+                const selectionGesture = gestureData.selection_gesture;
+                
+                // Handle basic navigation gestures
+                if (gesture !== null) {
+                    let actionTaken = false;
+                    
+                    if (gesture === 'point_up') {
+                        selectItem(Math.max(0, selectedIndex - 1));
+                        showGestureMessage('Select Previous');
+                        actionTaken = true;
+                    } else if (gesture === 'point_down') {
+                        selectItem(Math.min(fileItems.length - 1, selectedIndex + 1));
+                        showGestureMessage('Select Next');
+                        actionTaken = true;
+                    } else if (gesture === 'point_left') {
+                        navigateDirectory('up');
+                        showGestureMessage('Go Up Directory');
+                        actionTaken = true;
+                    } else if (gesture === 'point_right' && selectedIndex >= 0) {
+                        activateItem(selectedIndex);
+                        showGestureMessage('Open Selected');
+                        actionTaken = true;
+                    } else if (gesture === 'open_palm') {
+                        loadDirectory();
+                        showGestureMessage('Refresh Directory');
+                        actionTaken = true;
+                    }
+                    
+                    if (actionTaken) {
+                        lastGestureTime = currentTime;
+                    }
+                }
+                
+                // Handle selection gestures
+                if (selectionGesture && selectedIndex >= 0) {
+                    if (selectionGesture === 'tap') {
+                        selectItem(selectedIndex);
+                        showGestureMessage('Select File');
+                        lastGestureTime = currentTime;
+                    } else if (selectionGesture === 'pinch') {
+                        activateItem(selectedIndex);
+                        showGestureMessage('Activate File');
+                        lastGestureTime = currentTime;
+                    }
+                }
+                
+                // Handle motion gestures for navigation
+                if (motion && motion !== 'stationary') {
+                    let actionTaken = false;
+                    
+                    if (motion === 'swipe_up') {
+                        selectItem(Math.max(0, selectedIndex - 1));
+                        showGestureMessage('Select Previous');
+                        actionTaken = true;
+                    } else if (motion === 'swipe_down') {
+                        selectItem(Math.min(fileItems.length - 1, selectedIndex + 1));
+                        showGestureMessage('Select Next');
+                        actionTaken = true;
+                    } else if (motion === 'swipe_left') {
+                        navigateDirectory('up');
+                        showGestureMessage('Go Up Directory');
+                        actionTaken = true;
+                    } else if (motion === 'swipe_right' && selectedIndex >= 0) {
+                        activateItem(selectedIndex);
+                        showGestureMessage('Open Selected');
+                        actionTaken = true;
+                    }
+                    
+                    if (actionTaken) {
+                        lastGestureTime = currentTime;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error during gesture processing:', error);
+            });
+        }
+        
+        // Continue the loop
+        requestAnimationFrame(processGestures);
+    }
+    
+    // Start the gesture processing loop
+    processGestures();
+    
+    // Function to update cursor position
+    function updateCursorPosition(x, y) {
+        // Convert normalized coordinates (0-1) to pixel position
+        const container = document.querySelector('.camera-view-container');
+        const rect = container.getBoundingClientRect();
+        
+        const posX = x * rect.width;
+        const posY = y * rect.height;
+        
+        // Update cursor position
+        gestureCursor.style.left = `${posX}px`;
+        gestureCursor.style.top = `${posY}px`;
+        gestureCursor.style.display = 'block';
+    }
+    
+    // Function to navigate directory
+    function navigateDirectory(direction) {
+        fetch(`/api/navigate?direction=${direction}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadDirectory();
+                } else {
+                    showStatusMessage('Directory navigation failed', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error navigating directory:', error);
+                showStatusMessage('Navigation error', 'error');
+            });
+    }
+    
+    // Function to show gesture message
+    function showGestureMessage(message) {
+        gestureMessageEl.textContent = message;
+        gestureMessageEl.classList.remove('show');
+        
+        // Force a reflow
+        void gestureMessageEl.offsetWidth;
+        
+        gestureMessageEl.classList.add('show');
+        
+        // Remove class after animation completes
+        setTimeout(() => {
+            gestureMessageEl.classList.remove('show');
+        }, 1500);
+    }
+}
+
+// File preview functions
+function showTextPreview(fileInfo) {
+    const previewData = fileInfo.preview;
+    const previewModal = new bootstrap.Modal(document.getElementById('filePreviewModal'));
+    
+    document.getElementById('previewModalTitle').textContent = fileInfo.file;
+    
+    let content = previewData.content;
+    if (previewData.truncated) {
+        content += '\n\n[File truncated due to size...]';
+    }
+    
+    document.getElementById('previewModalBody').innerHTML = `
+<div>
+<pre>
+${escapeHtml(content)}
+
+</pre>
+</div>
+    `;
+    
+    // Configure the Open button
+    const openBtn = document.getElementById('openFileBtn');
+    openBtn.onclick = () => window.open(`/api/file/download?path=${encodeURIComponent(fileInfo.path)}`, '_blank');
+    
+    // Show the modal
+    previewModal.show();
+}
+
+function showImagePreview(fileInfo) {
+    const previewData = fileInfo.preview;
+    const previewModal = new bootstrap.Modal(document.getElementById('filePreviewModal'));
+    
+    document.getElementById('previewModalTitle').textContent = fileInfo.file;
+    
+    document.getElementById('previewModalBody').innerHTML = `
+<div>
+            <img src="/api/file/image/${encodeURIComponent(previewData.file_path)}" 
+                 class="img-fluid" style="max-height: 500px;" 
+                 alt="${fileInfo.file}">
+</div>
+    `;
+    
+    // Configure the Open button
+    const openBtn = document.getElementById('openFileBtn');
+    openBtn.onclick = () => window.open(`/api/file/image/${encodeURIComponent(previewData.file_path)}`, '_blank');
+    
+    // Show the modal
+    previewModal.show();
+}
+
+function showPDFPreview(fileInfo) {
+    const previewData = fileInfo.preview;
+    
+    // Redirect to the PDF viewer
+    window.open(previewData.view_url, '_blank');
+}
+
+function showGenericFileInfo(fileInfo) {
+    const previewData = fileInfo.preview;
+    const previewModal = new bootstrap.Modal(document.getElementById('filePreviewModal'));
+    
+    document.getElementById('previewModalTitle').textContent = fileInfo.file;
+    
+    const fileSize = formatFileSize(previewData.size || 0);
+    
+    document.getElementById('previewModalBody').innerHTML = `
+<div>
+<i class="fas fa-file fa-5x text-secondary mb-3"></i>
+
+<h5>
+${fileInfo.file}
+
+</h5>
+<p>
+File type: ${fileInfo.extension || 'unknown'}
+
+</p>
+<p>
+Size: ${fileSize}
+
+</p>
+<p>
+${previewData.message || ''}
+
+</p>
+            <div class="alert alert-info mt-3">
+<i class="fas fa-info-circle"></i>
+
+                Preview not available for this file type.
+</div>
+        </div>
+    `;
+    
+    // Configure the Open button
+    const openBtn = document.getElementById('openFileBtn');
+    openBtn.onclick = () => window.open(`/api/file/download?path=${encodeURIComponent(fileInfo.path)}`, '_blank');
+    
+    // Show the modal
+    previewModal.show();
+}
+
+// Helper function to format file sizes
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+});
+
+</script>
+{% endblock %}
+

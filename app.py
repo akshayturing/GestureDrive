@@ -1508,6 +1508,7 @@ def view_pdf():
         
     # Return PDF viewer page 
     return render_template('pdf_viewer.html', pdf_path=file_path)
+
 @app.route('/api/file/serve_pdf')
 def serve_pdf():
     """Serve PDF files to the viewer"""
@@ -1532,3 +1533,34 @@ def serve_pdf():
         )
     else:
         return send_file(file_path, mimetype='application/pdf')
+    
+@app.route('/api/hand_position')
+def api_hand_position():
+    """API endpoint to get current hand position for UI tracking"""
+    cam = get_camera()
+    
+    # Default response when no hand is visible
+    position_data = {
+        'visible': False,
+        'x': 0,
+        'y': 0
+    }
+    
+    # Extract hand position if available
+    if hasattr(cam, 'hand_landmarks_data') and cam.hand_landmarks_data:
+        try:
+            # Get first hand, index finger tip (landmark 8)
+            hand = cam.hand_landmarks_data[0]
+            index_tip = hand.landmark[8]
+            
+            # Return normalized coordinates (0-1)
+            position_data = {
+                'visible': True,
+                'x': index_tip.x,  # 0-1 normalized
+                'y': index_tip.y   # 0-1 normalized
+            }
+        except (IndexError, AttributeError):
+            # Handle any errors accessing landmarks
+            pass
+    
+    return jsonify(position_data)

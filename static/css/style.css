@@ -177,3 +177,72 @@
     max-width: 100%;
     object-fit: contain;
 }
+
+/* Viewport styling */
+.viewport-container {
+    position: relative;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 0.25rem 0.25rem;
+    overflow: hidden;
+}
+
+/* Viewport items */
+.viewport-item {
+    flex: 0 0 120px;
+    height: 100%;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transform-origin: center center;
+    position: relative;
+}
+
+.viewport-item.selected {
+    transform: scale(1.1);
+    z-index: 10;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.25);
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.viewport-item .icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.viewport-item.selected .icon {
+    opacity: 1;
+}
+
+.viewport-item .name {
+    font-size: 0.8rem;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+}
+
+/* Gesture cursor animation */
+@keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.2); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.gesture-cursor-active {
+    animation: pulse 0.5s ease-out;
+}
+
+/* File type icons */
+.icon-folder { color: #ffc107; }
+.icon-text { color: #6c757d; }
+.icon-image { color: #28a745; }
+.icon-pdf { color: #dc3545; }
+.icon-audio { color: #6f42c1; }
+.icon-video { color: #fd7e14; }
+.icon-file { color: #6c757d; }
