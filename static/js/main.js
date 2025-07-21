@@ -399,3 +399,20 @@ return unsafe
 .replace(/"/g, "\"")
 .replace(/'/g, "'");
 }
+
+function animateCursor(gesture) {
+    const cursor = document.getElementById('gesture-cursor');
+    if (!cursor) return;
+    
+    // Remove existing animation classes
+    cursor.classList.remove('select-gesture', 'activate-gesture');
+    
+    // Add new animation class
+    if (gesture === 'tap' || gesture === 'select') {
+        cursor.style.backgroundColor = 'rgba(0, 123, 255, 0.6)';
+        cursor.classList.add('select-gesture');
+    } else if (gesture === 'pinch' || gesture === 'activate') {
+        cursor.style.backgroundColor = 'rgba(40, 167, 69, 0.6)';
+        cursor.classList.add('activate-gesture');
+    }
+}

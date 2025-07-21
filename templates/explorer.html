@@ -140,10 +140,10 @@ Open
 </div>
 </div>
 <style>
-/* Explorer layout /
+/* Explorer layout */
 .explorer-container {
 display: flex;
-height: calc(100vh - 56px); / Adjust for navbar height */
+height: calc(100vh - 56px); /* Adjust for navbar height */
 background-color: #212529;
 position: relative;
 }
@@ -424,12 +424,7 @@ startGestureProcessing();
 
 // Load directory contents
 function loadDirectory() {
-    fileList.innerHTML = '
-<div>
-Loading files...
-
-</div>
-';
+    fileList.innerHTML = ' <div> Loading files...  </div>';
 
     fetch('/api/directory')
         .then(response => response.json())
@@ -445,15 +440,10 @@ Loading files...
         })
         .catch(error => {
             console.error('Error loading directory:', error);
-            fileList.innerHTML = `
-<div>
-Error: ${error.message}
-
-</div>
-`;
-showStatusMessage('Failed to load directory', 'error');
-});
-}
+            fileList.innerHTML = ` <div> Error: ${error.message}  </div> `;
+            showStatusMessage('Failed to load directory', 'error');
+            });
+    }
 
 // Render file list
 function renderFileList(data) {
@@ -461,14 +451,9 @@ function renderFileList(data) {
     fileItems = files;
     
     if (files.length === 0) {
-        fileList.innerHTML = '
-<div>
-No files in this directory
-
-</div>
-';
-return;
-}
+        fileList.innerHTML = ' <div> No files in this directory  </div> ';
+    return;
+    }
 
     let html = '';
     files.forEach((file, index) => {

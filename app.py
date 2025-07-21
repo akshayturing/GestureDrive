@@ -1564,3 +1564,45 @@ def api_hand_position():
             pass
     
     return jsonify(position_data)
+
+@app.route('/explorer')
+def explorer():
+    """Integrated file explorer with camera feed"""
+    # Ensure gesture processor is running
+    start_gesture_processor()
+    return render_template('explorer.html')
+
+@app.route('/api/file/download')
+def download_file():
+    """Download file endpoint"""
+    file_path = request.args.get('path', '')
+    
+    if not file_path or not os.path.exists(file_path):
+        return "File not found", 404
+        
+    # Check that it's a file and not a directory
+    if not os.path.isfile(file_path):
+        return "Not a valid file", 403
+        
+    # Serve the file as an attachment
+    return send_file(
+        file_path, 
+        as_attachment=True,
+        download_name=os.path.basename(file_path)
+    )
+
+@app.route('/api/process_selection')
+def api_process_selection():
+    """API endpoint for processing selection gestures"""
+    gesture = request.args.get('gesture', '')
+    result = file_controller.process_selection_gesture(gesture)
+    
+    # Add directory info to the response
+    result['directory'] = file_controller.get_directory_info()
+    
+    # Add file preview if activating a file
+    if result['action'] == 'activate' and 'path' in result:
+        preview_data = file_controller.get_file_preview(result['path'])
+        result['preview'] = preview_data
+        
+    return jsonify(result)

@@ -246,3 +246,23 @@
 .icon-audio { color: #6f42c1; }
 .icon-video { color: #fd7e14; }
 .icon-file { color: #6c757d; }
+
+.gesture-cursor.select-gesture {
+    animation: select-pulse 0.5s ease-out;
+}
+
+.gesture-cursor.activate-gesture {
+    animation: activate-pulse 0.5s ease-out;
+}
+
+@keyframes select-pulse {
+    0% { transform: translate(-50%, -50%) scale(1); background-color: rgba(0, 123, 255, 0.6); }
+    50% { transform: translate(-50%, -50%) scale(1.5); background-color: rgba(0, 123, 255, 0.8); }
+    100% { transform: translate(-50%, -50%) scale(1); background-color: rgba(0, 123, 255, 0.6); }
+}
+
+@keyframes activate-pulse {
+    0% { transform: translate(-50%, -50%) scale(1); background-color: rgba(40, 167, 69, 0.6); }
+    50% { transform: translate(-50%, -50%) scale(1.5); background-color: rgba(40, 167, 69, 0.8); }
+    100% { transform: translate(-50%, -50%) scale(1); background-color: rgba(40, 167, 69, 0.6); }
+}

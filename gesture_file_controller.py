@@ -331,3 +331,27 @@ class GestureFileController:
             'modified': os.path.getmtime(file_path)
         }
     
+    def get_file_download_info(self, file_path):
+        """
+        Get information for file download
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Dictionary with download information
+        """
+        if not os.path.exists(file_path) or not os.path.isfile(file_path):
+            return {'status': 'error', 'message': 'File not found or not a file'}
+        
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+        file_type = self.get_file_type(file_path)
+        
+        return {
+            'status': 'success',
+            'name': file_name,
+            'path': file_path,
+            'size': file_size,
+            'type': file_type
+        }
