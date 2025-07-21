@@ -2022,7 +2022,7 @@ class Camera:
             cv2.circle(frame, (x, y), 20, (0, 255, 0), -1)
             cv2.circle(frame, (x, y), 25, (255, 255, 255), 2)
 
-            
+
     def _process_frame(self, frame):
         """Process frame to detect hands and filter gestures"""
         # Your existing frame processing code...
@@ -2964,6 +2964,23 @@ class Camera:
     #         cv2.putText(frame, line, (padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
     #         y += line_height
 
+    def get_jpeg_frame(self, processed=True):
+        """Return the current frame as JPEG bytes"""
+        with self.lock:
+            frame = self.processed_frame if processed and self.processed_frame is not None else self.frame
+            
+            if frame is None:
+                # Generate blank frame
+                blank_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+                cv2.putText(blank_frame, "No camera frame available", (50, 240), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                
+                ret, jpeg = cv2.imencode('.jpg', blank_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                return jpeg.tobytes() if ret else None
+            
+            # Encode frame to JPEG
+            ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            return jpeg.tobytes() if ret else None
     def _draw_validation_info(self, frame):
         """Draw enhanced validation information on frame for debugging"""
         # Get debug info from tracker
