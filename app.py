@@ -1182,6 +1182,13 @@ from flask import jsonify, request, render_template
 
 from camera import Camera
 from gesture_file_controller import GestureFileController
+from profile_manager import ProfileManager
+
+# Initialize profile manager
+profile_manager = ProfileManager()
+
+# Connect profile manager with gesture config manager
+profile_manager.set_gesture_config_manager(gesture_controller.config_manager)
 
 # Initialize the Flask app
 app = Flask(__name__)
@@ -1740,3 +1747,215 @@ def update_gesture_config():
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+# Add routes for profile management
+@app.route('/profiles')
+def profile_manager_page():
+    return render_template('profile_manager.html')
+
+@app.route('/api/profiles/list')
+def list_profiles():
+    """API endpoint to list all available profiles"""
+    profile_manager.refresh_available_profiles()
+    return jsonify({
+        "profiles": profile_manager.available_profiles,
+        "activeProfileId": profile_manager.active_profile
+    })
+
+@app.route('/api/profiles/details/<profile_id>')
+def get_profile_details(profile_id):
+    """API endpoint to get detailed information about a profile"""
+    profile_info = profile_manager.get_profile_info(profile_id)
+    
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    try:
+        with open(profile_info["path"], 'r') as f:
+            profile_data = json.load(f)
+        return jsonify(profile_data)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load profile: {str(e)}"}), 500
+
+@app.route('/api/profiles/create', methods=['POST'])
+def create_profile():
+    """API endpoint to create a new profile"""
+    data = request.json
+    
+    if not data or 'name' not in data:
+        return jsonify({"error": "Profile name is required"}), 400
+    
+    profile_id = profile_manager.create_new_profile(
+        name=data['name'],
+        description=data.get('description', ''),
+        as_user_profile=data.get('asUserProfile', False)
+    )
+    
+    if profile_id:
+        return jsonify({
+            "success": True,
+            "profileId": profile_id,
+            "message": f"Profile created successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to create profile"}), 500
+
+@app.route('/api/profiles/clone', methods=['POST'])
+def clone_profile():
+    """API endpoint to clone a profile"""
+    data = request.json
+    
+    if not data or 'sourceProfileId' not in data or 'newName' not in data:
+        return jsonify({"error": "Source profile ID and new name are required"}), 400
+    
+    profile_id = profile_manager.clone_profile(
+        profile_id=data['sourceProfileId'],
+        new_name=data['newName'],
+        as_user_profile=data.get('asUserProfile', False)
+    )
+    
+    if profile_id:
+        return jsonify({
+            "success": True,
+            "profileId": profile_id,
+            "message": f"Profile cloned successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to clone profile"}), 500
+
+@app.route('/api/profiles/update', methods=['PUT'])
+def update_profile():
+    """API endpoint to update a profile's metadata"""
+    data = request.json
+    
+    if not data or 'profileId' not in data or 'name' not in data:
+        return jsonify({"error": "Profile ID and name are required"}), 400
+    
+    # Get the profile
+    profile_info = profile_manager.get_profile_info(data['profileId'])
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    try:
+        with open(profile_info["path"], 'r') as f:
+            profile_data = json.load(f)
+        
+        # Update metadata
+        profile_data["profileName"] = data['name']
+        profile_data["description"] = data.get('description', '')
+        
+        # Save the updated profile
+        result = profile_manager.save_profile(profile_data, data['profileId'], overwrite=True)
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "profileId": result,
+                "message": f"Profile updated successfully: {result}"
+            })
+        else:
+            return jsonify({"error": "Failed to update profile"}), 500
+            
+    except Exception as e:
+        return jsonify({"error": f"Failed to update profile: {str(e)}"}), 500
+
+@app.route('/api/profiles/delete/<profile_id>', methods=['DELETE'])
+def delete_profile(profile_id):
+    """API endpoint to delete a profile"""
+    if profile_id == "default":
+        return jsonify({"error": "Cannot delete the default profile"}), 400
+    
+    if profile_manager.delete_profile(profile_id):
+        return jsonify({
+            "success": True,
+            "message": f"Profile deleted successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to delete profile"}), 500
+
+@app.route('/api/profiles/activate/<profile_id>', methods=['POST'])
+def activate_profile(profile_id):
+    """API endpoint to activate a profile"""
+    # Get the profile info for the name
+    profile_info = profile_manager.get_profile_info(profile_id)
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    if profile_manager.load_profile(profile_id):
+        return jsonify({
+            "success": True,
+            "profileId": profile_id,
+            "profileName": profile_info["name"],
+            "message": f"Profile activated successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to activate profile"}), 500
+
+@app.route('/api/profiles/export/<profile_id>')
+def export_profile(profile_id):
+    """API endpoint to export a profile"""
+    # Get the profile
+    profile_info = profile_manager.get_profile_info(profile_id)
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    try:
+        with open(profile_info["path"], 'r') as f:
+            profile_data = json.load(f)
+        
+        # Set content disposition for download
+        profile_name = profile_info["name"].replace(" ", "_").lower()
+        response = jsonify(profile_data)
+        response.headers["Content-Disposition"] = f"attachment; filename={profile_name}.json"
+        return response
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to export profile: {str(e)}"}), 500
+
+@app.route('/api/profiles/import', methods=['POST'])
+def import_profile():
+    """API endpoint to import a profile"""
+    if 'profileFile' not in request.files:
+        return jsonify({"error": "No profile file provided"}), 400
+    
+    profile_file = request.files['profileFile']
+    
+    if profile_file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+    
+    if not profile_file.filename.endswith('.json'):
+        return jsonify({"error": "Profile file must be a JSON file"}), 400
+    
+    try:
+        # Create a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            profile_file.save(tmp.name)
+            
+            # Import the profile
+            profile_id = profile_manager.import_profile(
+                import_path=tmp.name,
+                new_name=request.form.get('newName'),
+                as_user_profile=request.form.get('asUserProfile') == 'true'
+            )
+            
+            # Clean up the temporary file
+            os.unlink(tmp.name)
+            
+            if profile_id:
+                # Get the profile name
+                profile_info = profile_manager.get_profile_info(profile_id)
+                
+                return jsonify({
+                    "success": True,
+                    "profileId": profile_id,
+                    "profileName": profile_info["name"],
+                    "message": f"Profile imported successfully: {profile_id}"
+                })
+            else:
+                return jsonify({"error": "Failed to import profile"}), 500
+                
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON file"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Failed to import profile: {str(e)}"}), 500
