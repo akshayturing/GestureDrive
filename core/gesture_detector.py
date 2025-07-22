@@ -2,6 +2,7 @@
 import math
 import time
 import numpy as np
+from profiling.performance_profiler import performance_tracker
 
 class SelectionGestureDetector:
     """Detects and tracks tap and pinch gestures for file selection"""
@@ -14,6 +15,31 @@ class SelectionGestureDetector:
         self.last_gesture_time = 0
         self.cooldown_period = cooldown_period
         
+    @performance_tracker.time_it(category="gesture_processing")
+    def process_frame(self, frame):
+        """Process a frame to detect hands and landmarks."""
+        # Convert to RGB for MediaPipe (measure conversion time)
+        convert_start = time.time()
+        rgb_frame = frame.copy()
+        if len(frame.shape) == 3:  # Color image
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        convert_time = time.time() - convert_start
+        
+        # Process with MediaPipe (measure MediaPipe processing time)
+        mediapipe_start = time.time()
+        results = self.hands.process(rgb_frame)
+        mediapipe_time = time.time() - mediapipe_start
+        
+        # Log performance statistics
+        if self.performance_logging and frame_count % 30 == 0:  # Log every 30 frames
+            logger.debug(f"Gesture detector: Convert: {convert_time*1000:.1f}ms, MediaPipe: {mediapipe_time*1000:.1f}ms")
+        
+        return {
+            'multi_hand_landmarks': results.multi_hand_landmarks,
+            'multi_handedness': results.multi_handedness
+        }
+    
+    @performance_tracker.time_it(category="gesture_recognition") 
     def update(self, hand_landmarks):
         """
         Update the detector with new hand landmark data
