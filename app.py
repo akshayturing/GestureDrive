@@ -1176,6 +1176,9 @@ import atexit
 import cv2
 import numpy as np
 from flask import send_file  # Add this import
+import os
+import json
+from flask import jsonify, request, render_template
 
 from camera import Camera
 from gesture_file_controller import GestureFileController
@@ -1606,3 +1609,134 @@ def api_process_selection():
         result['preview'] = preview_data
         
     return jsonify(result)
+
+# Add these routes to your Flask application
+@app.route('/gestures/settings')
+def gesture_settings():
+    return render_template('gesture_settings.html')
+
+@app.route('/api/gestures/config', methods=['GET'])
+def get_gesture_config():
+    """API endpoint to get the current gesture configuration summary."""
+    config_summary = gesture_controller.config_manager.get_gesture_configuration_summary()
+    return jsonify(config_summary)
+
+@app.route('/api/gestures/config/full', methods=['GET'])
+def get_full_gesture_config():
+    """API endpoint to get the full gesture configuration."""
+    try:
+        config_path = gesture_controller.config_manager.config_path
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/gestures/reload', methods=['POST'])
+def reload_gesture_config():
+    """API endpoint to trigger a reload of the gesture configuration."""
+    success = gesture_controller.reload_configuration()
+    return jsonify({"success": success})
+
+@app.route('/api/gestures/context/<context>', methods=['POST'])
+def set_gesture_context(context):
+    """API endpoint to change the current gesture context."""
+    gesture_controller.change_context(context)
+    return jsonify({"success": True, "context": context})
+
+@app.route('/api/gestures/detail/<gesture_name>')
+def get_gesture_detail(gesture_name):
+    """API endpoint to get detailed information about a specific gesture."""
+    try:
+        config = gesture_controller.config_manager.config
+        
+        # Check individual gestures
+        if gesture_name in config.get("individualGestures", {}):
+            details = config["individualGestures"][gesture_name]
+            
+            # Get action details if available
+            action_name = details.get("action")
+            action_details = config["actions"].get(action_name, {}) if action_name else None
+            
+            return jsonify({
+                "type": "individual",
+                "name": gesture_name,
+                "action": action_name,
+                "description": details.get("description", ""),
+                "params": details.get("params", {}),
+                "enabled": details.get("enabled", True),
+                "cooldownMs": details.get("cooldownMs", None),
+                "actionDetails": action_details
+            })
+            
+        # Check compound gestures
+        elif gesture_name in config.get("compoundGestures", {}):
+            details = config["compoundGestures"][gesture_name]
+            
+            # Get action details if available
+            action_name = details.get("action")
+            action_details = config["actions"].get(action_name, {}) if action_name else None
+            
+            return jsonify({
+                "type": "compound",
+                "name": gesture_name,
+                "action": action_name,
+                "description": details.get("description", ""),
+                "params": details.get("params", {}),
+                "enabled": details.get("enabled", True),
+                "sequence": details.get("sequence", []),
+                "concurrent": details.get("concurrent", []),
+                "maxTimeBetweenMs": details.get("maxTimeBetweenMs", None),
+                "priority": details.get("priority", 0),
+                "actionDetails": action_details
+            })
+            
+        # Gesture not found
+        else:
+            return jsonify({"error": "Gesture not found"}), 404
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/gestures/config/update', methods=['POST'])
+def update_gesture_config():
+    """API endpoint to update the gesture configuration file."""
+    try:
+        # Get the updated configuration
+        updated_config = request.get_json()
+        
+        # Validate the configuration
+        if not isinstance(updated_config, dict):
+            return jsonify({"success": False, "error": "Invalid configuration format"}), 400
+            
+        # Required fields
+        if "version" not in updated_config or "individualGestures" not in updated_config or "actions" not in updated_config:
+            return jsonify({
+                "success": False, 
+                "error": "Missing required fields in configuration"
+            }), 400
+            
+        # Write to the config file
+        config_path = gesture_controller.config_manager.config_path
+        
+        # Create parent directory if it doesn't exist
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        # Backup the current config file
+        if os.path.exists(config_path):
+            backup_path = config_path + ".backup"
+            with open(config_path, 'r') as src:
+                with open(backup_path, 'w') as dst:
+                    dst.write(src.read())
+                    
+        # Write the updated config
+        with open(config_path, 'w') as f:
+            json.dump(updated_config, f, indent=2)
+            
+        # Reload the configuration
+        success = gesture_controller.reload_configuration()
+        
+        return jsonify({"success": success})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

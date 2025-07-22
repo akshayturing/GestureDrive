@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}GestureDrive - Gesture Settings{% endblock %}
+
+{% block content %}
+<div>
+<h1>
+Gesture Configuration
+
+</h1>
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-info">
+<p>
+<strong>
+Configuration Status:
+
+</strong>
+                Version
+<span>
+loading...
+
+</span>
+|
+Last Modified:
+
+<span>
+loading...
+
+</span>
+|
+Current Context:
+
+<span>
+loading...
+
+</span>
+</p>
+</div>
+    </div>
+</div>
+<div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+<h5>
+Individual Gestures
+
+</h5>
+<span>
+0
+
+</span>
+</div>
+<div>
+                <div class="table-responsive">
+<table>
+<thead>
+<tr>
+<th>
+Gesture
+
+</th>
+<th>
+Action
+
+</th>
+<th>
+Description
+
+</th>
+<th>
+Status
+
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+Loading gestures...
+
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+            </div>
+        </div>
+    </div>
+<div>
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+<h5>
+Compound Gestures
+
+</h5>
+<span>
+0
+
+</span>
+</div>
+<div>
+                <div class="table-responsive">
+<table>
+<thead>
+<tr>
+<th>
+Gesture
+
+</th>
+<th>
+Action
+
+</th>
+<th>
+Description
+
+</th>
+<th>
+Status
+
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+Loading gestures...
+
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+<div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+<h5>
+Context Selector
+
+</h5>
+</div>
+<div>
+<p>
+Switch the current gesture context to change how gestures are interpreted in different application modules.
+
+</p>
+                <div class="btn-group w-100" role="group" id="context-selector">
+<button>
+Default
+
+</button>
+                    <!-- Additional buttons will be added dynamically -->
+</div>
+            </div>
+        </div>
+    </div>
+<div>
+        <div class="card">
+            <div class="card-header">
+<h5>
+Configuration Management
+
+</h5>
+</div>
+<div>
+                <div class="mb-3">
+<button>
+<i class="fas fa-sync-alt"></i>
+
+Reload Configuration
+
+</button>
+<button>
+<i class="fas fa-edit"></i>
+
+Edit Configuration File
+
+</button>
+</div>
+<div id="config-status-message"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div>
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+<h5>
+Edit Configuration
+
+</h5>
+</div>
+<div>
+                <div class="alert alert-warning">
+<strong>
+Warning:
+
+</strong>
+Editing the configuration directly requires careful JSON syntax.
+Invalid JSON will cause the configuration to fail to load.
+
+</div>
+<div>
+<textarea>
+                        Loading configuration...
+</textarea>
+</div>
+<div>
+<button>
+Cancel
+
+</button>
+<button>
+Save Configuration
+
+</button>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gesture Detail Modal -->
+<div>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+<h5>
+Gesture Details
+
+</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+</div>
+<div>
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+<span>
+Loading...
+
+</span>
+</div>
+                </div>
+            </div>
+<div>
+<button>
+Close
+
+</button>
+</div>
+        </div>
+    </div>
+</div>
+</div>
+<script src="/static/js/gesture_settings.js"></script>
+{% endblock %}
