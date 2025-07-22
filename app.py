@@ -1959,3 +1959,77 @@ def import_profile():
         return jsonify({"error": "Invalid JSON file"}), 400
     except Exception as e:
         return jsonify({"error": f"Failed to import profile: {str(e)}"}), 500
+
+@app.route('/gestures/record')
+def gesture_record_page():
+    return render_template('gesture_record.html')
+
+@app.route('/api/gestures/start_recording', methods=['POST'])
+def start_gesture_recording():
+    # Get request data
+    data = request.get_json()
+    label = data.get('label', '')
+    duration = data.get('duration', 5)  # Default 5 seconds
+    
+    # Create recorder with the existing camera
+    from hand_motion_recorder import HandMotionRecorder
+    recorder = HandMotionRecorder(camera_id=gesture_controller.camera.camera_id)
+    
+    # Start recording
+    success = recorder.start_recording(label=label)
+    
+    if success:
+        # Store recorder in session
+        session['recorder'] = recorder
+        session['record_start_time'] = time.time()
+        session['record_duration'] = duration
+        
+        return jsonify({"success": True, "message": "Recording started"})
+    else:
+        return jsonify({"success": False, "error": "Failed to start recording"})
+
+@app.route('/api/gestures/stop_recording', methods=['POST'])
+def stop_gesture_recording():
+    recorder = session.get('recorder')
+    if not recorder:
+        return jsonify({"success": False, "error": "No active recording"})
+    
+    # Stop recording and save
+    recording_path = recorder.stop_recording()
+    
+    if recording_path:
+        return jsonify({
+            "success": True, 
+            "recording_path": recording_path,
+            "message": "Recording saved successfully"
+        })
+    else:
+        return jsonify({"success": False, "error": "Failed to save recording"})
+
+@app.route('/api/gestures/analyze_recording', methods=['POST'])
+def analyze_gesture_recording():
+    data = request.get_json()
+    recording_path = data.get('recording_path')
+    
+    if not recording_path or not os.path.exists(recording_path):
+        return jsonify({"success": False, "error": "Invalid recording path"})
+    
+    # Analyze the recording
+    from hand_motion_analyzer import HandMotionAnalyzer
+    analyzer = HandMotionAnalyzer()
+    
+    with open(recording_path, 'r') as f:
+        recording = json.load(f)
+    
+    # Extract features
+    features = analyzer.extract_features(recording)
+    
+    # Detect gestures
+    gestures = analyzer.detect_gestures(recording)
+    
+    return jsonify({
+        "success": True,
+        "features": features,
+        "gestures": gestures,
+        "message": "Analysis complete"
+    })
