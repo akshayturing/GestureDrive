@@ -2033,3 +2033,106 @@ def analyze_gesture_recording():
         "gestures": gestures,
         "message": "Analysis complete"
     })
+
+@app.route('/api/gestures/export/<session_id>', methods=['GET'])
+def export_gesture_signature(session_id):
+    """API endpoint to export a gesture signature to JSON"""
+    # Extract the signature
+    signature = gesture_signature_manager.extract_signature_from_session(session_id)
+    
+    if not signature:
+        return jsonify({
+            "success": False,
+            "error": "Failed to extract signature"
+        }), 400
+    
+    # Create a model
+    model = gesture_signature_manager.extractor.build_gesture_model(signature)
+    
+    # Serialize to JSON
+    serialized = gesture_signature_manager.serialize_gesture_signature(signature, model)
+    
+    # Get gesture name for filename
+    gesture_name = signature.get("gesture_name", "gesture")
+    safe_name = gesture_name.replace(" ", "_").lower()
+    
+    # Return as downloadable file
+    response = jsonify(serialized)
+    response.headers["Content-Disposition"] = f"attachment; filename=gesture_{safe_name}.json"
+    return response
+
+@app.route('/api/gestures/import', methods=['POST'])
+def import_gesture_signature():
+    """API endpoint to import a gesture signature from JSON"""
+    if 'file' not in request.files:
+        return jsonify({
+            "success": False,
+            "error": "No file uploaded"
+        }), 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({
+            "success": False,
+            "error": "No file selected"
+        }), 400
+    
+    if not file.filename.endswith('.json'):
+        return jsonify({
+            "success": False,
+            "error": "File must be a JSON file"
+        }), 400
+    
+    try:
+        # Load file content
+        serialized = json.load(file)
+        
+        # Deserialize
+        signature, model = gesture_signature_manager.deserialize_gesture_signature(serialized)
+        
+        if not signature or not model:
+            return jsonify({
+                "success": False,
+                "error": "Invalid signature format"
+            }), 400
+        
+        # Save the model
+        model_path = gesture_signature_manager.extractor.save_gesture_model(
+            model, output_dir=str(MODEL_DIR)
+        )
+        
+        if not model_path:
+            return jsonify({
+                "success": False,
+                "error": "Failed to save model"
+            }), 500
+        
+        # Create gesture configuration
+        config = gesture_signature_manager.create_gesture_config(model)
+        
+        if not config:
+            return jsonify({
+                "success": False,
+                "error": "Failed to create gesture configuration"
+            }), 500
+        
+        # Force reload of gesture configuration
+        gesture_controller.reload_configuration()
+        
+        return jsonify({
+            "success": True,
+            "gesture_name": signature.get("gesture_name"),
+            "message": f"Imported gesture '{signature.get('gesture_name')}' successfully"
+        })
+        
+    except json.JSONDecodeError:
+        return jsonify({
+            "success": False,
+            "error": "Invalid JSON file"
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Error importing gesture: {str(e)}"
+        }), 500
