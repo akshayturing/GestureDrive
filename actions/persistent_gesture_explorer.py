@@ -7,12 +7,12 @@ import argparse
 import threading
 from pathlib import Path
 
-from camera import Camera
+from core.camera import Camera
 from persistent_gesture_navigator import PersistentGestureNavigator
 
 def ensure_camera_methods():
     """Add required methods to the Camera class if they don't exist."""
-    from camera import Camera
+    from core.camera import Camera
     
     # Add stop method if needed
     if not hasattr(Camera, 'stop') or not callable(getattr(Camera, 'stop', None)):

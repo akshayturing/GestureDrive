@@ -1,5 +1,5 @@
 # Import the necessary modules
-from camera import Camera
+from core.camera import Camera
 import cv2
 import time
 

@@ -16,7 +16,7 @@ from flask import Response
 # Adjust these imports based on your actual file structure
 # We'll use import guards to handle cases where the actual modules are not available
 try:
-    from camera import Camera, init_camera, get_camera, cleanup_camera, _cleanup_all_cameras
+    from core.camera import Camera, init_camera, get_camera, cleanup_camera, _cleanup_all_cameras
     import app as flask_app
     MODULES_AVAILABLE = True
 except ImportError:

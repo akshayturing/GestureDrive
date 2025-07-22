@@ -1,6 +1,6 @@
 # file_system_gesture_interface.py
 
-from file_system_manager import FileSystemManager
+from actions.file_system_manager import FileSystemManager
 from gesture_recognizer import GestureRecognizer
 from typing import Dict, List, Any, Callable
 

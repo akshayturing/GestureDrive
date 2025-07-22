@@ -10,7 +10,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import the Camera class
-from camera import Camera
+from core.camera import Camera
 
 @unittest.skipIf(not cv2.VideoCapture(0).isOpened(), "No camera available for testing")
 class TestCameraIntegration(unittest.TestCase):

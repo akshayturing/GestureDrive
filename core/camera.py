@@ -1655,7 +1655,7 @@ import mediapipe as mp
 import time
 import threading
 from gesture_tracking import HandLandmarkTracker
-from gesture_detector import SelectionGestureDetector
+from core.gesture_detector import SelectionGestureDetector
 class LandmarkBuffer:
     """
     Maintains a time-sequenced buffer of hand landmark coordinates

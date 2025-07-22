@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-from camera import Camera
+from core.camera import Camera
 from gesture_navigation_controller import GestureNavigationController
 
 class DynamicGestureNavigator:

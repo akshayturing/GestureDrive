@@ -245,7 +245,7 @@ def draw_file_browser(frame, nav_controller):
 
 import cv2
 import time
-from camera import Camera
+from core.camera import Camera
 from gesture_recognizer import GestureRecognizer
 def main():
     # Initialize camera

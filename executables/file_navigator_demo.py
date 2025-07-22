@@ -2,8 +2,8 @@ import cv2
 import time
 import numpy as np
 
-from camera import Camera
-from gesture_navigation import NavigationGestureController
+from core.camera import Camera
+from actions.gesture_navigation import NavigationGestureController
 
 def draw_file_browser(frame, nav_controller):
     """Draw file browser interface on the frame"""

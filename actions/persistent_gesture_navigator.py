@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from gesture_tracking import HandLandmarkTracker
-from directory_state_manager import DirectoryStateManager
+from core.directory_state_manager import DirectoryStateManager
 
 class PersistentGestureNavigator:
     """

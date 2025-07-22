@@ -1180,8 +1180,8 @@ import os
 import json
 from flask import jsonify, request, render_template
 
-from camera import Camera
-from gesture_file_controller import GestureFileController
+from core.camera import Camera
+from actions.gesture_file_controller import GestureFileController
 from profile_manager import ProfileManager
 
 # Initialize profile manager

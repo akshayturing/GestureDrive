@@ -10,7 +10,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import the Camera class and LandmarkSmoother
-from camera import Camera, LandmarkSmoother
+from core.camera import Camera, LandmarkSmoother
 
 class MockLandmark:
     """Mock class for MediaPipe landmarks"""

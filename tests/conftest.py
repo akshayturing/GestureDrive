@@ -7,10 +7,10 @@ import numpy as np
 from flask import Flask
 from datetime import datetime
 
-from camera import Camera
+from core.camera import Camera
 from gesture_recognizer import GestureRecognizer
-from gesture_detector import SelectionGestureDetector
-from gesture_file_controller import GestureFileController
+from core.gesture_detector import SelectionGestureDetector
+from actions.gesture_file_controller import GestureFileController
 from app import app as flask_app
 
 @pytest.fixture

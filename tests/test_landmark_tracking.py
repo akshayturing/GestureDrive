@@ -10,7 +10,7 @@ import math
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import the Camera and LandmarkSmoother
-from camera import Camera, LandmarkSmoother
+from core.camera import Camera, LandmarkSmoother
 
 class MockLandmark:
     def __init__(self, x, y, z=0.0):
