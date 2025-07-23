@@ -17,7 +17,8 @@ Live Webcam Feed
 </h3>
 </div>
 <div>
-            <div class="video-container">
+            <!-- <div class="video-container"> -->
+                <div class="video-feed"></div>
                 <!-- MJPEG stream from the server -->
                 <img src="{{ url_for('video_feed') }}" class="img-fluid" alt="Webcam Stream">
 </div>
@@ -159,3 +160,4 @@ document.getElementById('reload-stream').addEventListener('click', function() {
     streamImg.src = "{{ url_for('video_feed') }}?" + new Date().getTime();
 });
 </script>
+
