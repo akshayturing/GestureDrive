@@ -75,8 +75,8 @@ def main():
             # Get the latest processed frame
             with camera.lock:
                 if camera.processed_frame is None:
-                    continue
-                frame = camera.processed_frame.copy()
+                    continueframe = camera.processed_frame.copy()
+                
             is_palm_open, confidence = False, 0.0
             # Track hand landmarks and status
             if camera.hand_landmarks_data:

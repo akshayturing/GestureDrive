@@ -2690,6 +2690,7 @@ class Camera:
         }
     
     def detect_swipe_gesture(self, min_velocity=0.3, min_displacement=0.08, hand_idx=0):
+
         """
         Detect swipe gestures based on palm movement.
         
@@ -2722,3 +2723,44 @@ class Camera:
             return f"swipe_{movement['direction']}"
         
         return None
+    def stop(self):
+        """Stop the camera capture thread and release resources"""
+        if not self.is_running:
+            print("Camera is already stopped")
+            return
+
+        # Signal the thread to stop
+        self.is_running = False
+        
+        # Wait for the thread to terminate
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2.0)
+            
+        # Release OpenCV resources
+        if hasattr(self, 'cap') and self.cap is not None:
+            self.cap.release()
+            
+        print(f"Camera stopped (ID {self.camera_id})")
+        
+        # Clean up MediaPipe resources
+        if hasattr(self, 'hands'):
+            self.hands.close()
+            
+        # Reset frame data
+        with self.lock:
+            self.frame = None
+            self.processed_frame = None
+            self.hand_landmarks_data = None
+
+    def get_processed_frame(self):
+        """
+        Get the latest processed frame in a thread-safe manner.
+        
+        Returns:
+            np.ndarray: A copy of the most recent processed frame, or None if no frame is available
+        """
+        with self.lock:
+            if self.processed_frame is None:
+                return None
+            # Return a copy to prevent modification of the internal frame
+            return self.processed_frame.copy()
