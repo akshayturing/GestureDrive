@@ -131,7 +131,7 @@
 
 # gesture_file_controller.py
 import logging
-from gesture_config_manager import GestureConfigManager
+from core.gesture_config_manager import GestureConfigManager
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

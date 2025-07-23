@@ -506,8 +506,8 @@ from unittest.mock import MagicMock, patch
 # Import the modules to test
 # Use conditional imports to handle case when we're running tests without actual implementation
 try:
-    from camera import Camera, LandmarkBuffer
-    from gesture_navigation import NavigationGestureController
+    from core.camera import Camera, LandmarkBuffer
+    from actions.gesture_navigation import NavigationGestureController
     IMPORTS_AVAILABLE = True
 except ImportError:
     IMPORTS_AVAILABLE = False

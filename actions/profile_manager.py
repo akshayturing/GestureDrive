@@ -66,7 +66,7 @@ class ProfileManager:
     
     def _create_default_profile(self):
         """Create a default profile with basic gesture mappings"""
-        from gesture_config_manager import GestureConfigManager
+        from core.gesture_config_manager import GestureConfigManager
         
         # Get configuration from the gesture config manager's default
         temp_manager = GestureConfigManager()

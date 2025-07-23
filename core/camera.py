@@ -1655,7 +1655,9 @@ import mediapipe as mp
 import time
 import threading
 from gesture_tracking import HandLandmarkTracker
-from gesture_detector import SelectionGestureDetector
+from core.gesture_detector import SelectionGestureDetector
+from profiling.performance_profiler import performance_tracker
+
 class LandmarkBuffer:
     """
     Maintains a time-sequenced buffer of hand landmark coordinates
@@ -1902,6 +1904,68 @@ class Camera:
         self.thread.start()
         print(f"Camera started with ID {self.camera_id}")
         
+    @performance_tracker.time_it(category="frame_acquisition")
+    def _capture_loop(self):
+        """Continuous camera capture loop running in a separate thread."""
+        frame_count = 0
+        start_time = time.time()
+        
+        while self.is_running:
+            loop_start = time.time()
+            
+            # Measure camera read time
+            read_start = time.time()
+            success, frame = self.video_capture.read()
+            read_time = time.time() - read_start
+            
+            if not success:
+                time.sleep(0.1)
+                continue
+            
+            # Track read times
+            with self.lock:
+                self.last_read_time = read_time * 1000  # ms
+            
+            # Basic frame processing
+            process_start = time.time()
+            if self.mirror:
+                frame = cv2.flip(frame, 1)
+            process_time = time.time() - process_start
+            
+            # Update FPS calculation
+            frame_count += 1
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= 1.0:
+                self.fps = frame_count / elapsed_time
+                frame_count = 0
+                start_time = time.time()
+                
+                # Log performance stats periodically
+                if hasattr(self, 'last_read_time'):
+                    logger.debug(f"Camera stats - FPS: {self.fps:.1f}, read time: {self.last_read_time:.1f}ms")
+            
+            # Update current frame with thread safety
+            with self.lock:
+                self.current_frame = frame
+                self.last_access = time.time()
+            
+            # Calculate loop time and sleep if necessary to prevent CPU overuse
+            loop_time = time.time() - loop_start
+            if loop_time < (1.0 / self.target_fps):
+                time.sleep((1.0 / self.target_fps) - loop_time)
+    
+    @performance_tracker.time_it(category="frame_retrieval")
+    def get_frame(self):
+        """Get the current camera frame and FPS, thread-safe."""
+        with self.lock:
+            if self.current_frame is not None:
+                frame = self.current_frame.copy()
+                fps = self.fps
+            else:
+                frame = None
+                fps = 0
+        
+        return frame, fps
     def _capture_loop(self):
         """Main capture loop that runs in a separate thread"""
         while self.is_running:

@@ -7,7 +7,7 @@ import tempfile
 import time
 import json
 from pathlib import Path
-from directory_state_manager import DirectoryStateManager
+from core.directory_state_manager import DirectoryStateManager
 
 class TestDirectoryStateManager(unittest.TestCase):
     """Test cases for the directory state manager component."""

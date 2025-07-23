@@ -9,15 +9,15 @@ import argparse
 import threading
 from typing import Dict, Any
 
-from camera import Camera
-from dynamic_gesture_navigator import DynamicGestureNavigator
+from core.camera import Camera
+from actions.dynamic_gesture_navigator import DynamicGestureNavigator
 
 def ensure_camera_methods():
     """
     Ensure the Camera class has needed methods.
     This function patches the Camera class if methods are missing.
     """
-    from camera import Camera
+    from core.camera import Camera
     
     # Add stop method if not present
     if not hasattr(Camera, 'stop') or not callable(getattr(Camera, 'stop', None)):
