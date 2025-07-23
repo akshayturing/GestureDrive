@@ -692,6 +692,61 @@ def api_settings():
     # Implementation depends on your specific requirements
     pass
 
+@app.route('/api/current_gestures', methods=['GET'])
+def get_current_gestures():
+    """API endpoint to get the current gestures with validation status"""
+    camera = current_app.config.get('camera')
+    
+    if not camera:
+        return jsonify({
+            'error': 'Camera not initialized'
+        }), 503
+    
+    # Get gesture data including validation status
+    gesture_data = camera.get_current_gestures()
+    
+    return jsonify(gesture_data)
+
+@app.route('/api/navigate', methods=['POST'])
+def navigate():
+    """API endpoint to process validated navigation gestures"""
+    data = request.json
+    gesture = data.get('gesture')
+    motion_gesture = data.get('motion_gesture')
+    
+    if not gesture and not motion_gesture:
+        return jsonify({'error': 'No gesture provided'}), 400
+    
+    # Get the navigator instance
+    navigator = current_app.config.get('gesture_navigator')
+    if not navigator:
+        return jsonify({'error': 'Navigator not initialized'}), 500
+    
+    # Use validated gestures for navigation (prioritizing motion gestures)
+    if motion_gesture and motion_gesture != 'stationary':
+        state = navigator.process_gesture(motion_gesture)
+    elif gesture:
+        state = navigator.process_gesture(gesture)
+    else:
+        state = navigator.get_current_state()
+        
+    return jsonify(state)
+
+@app.route('/api/toggle_validation_display', methods=['POST'])
+def toggle_validation_display():
+    """Toggle the display of validation information on the video feed"""
+    camera = current_app.config.get('camera')
+    
+    if not camera:
+        return jsonify({'error': 'Camera not initialized'}), 503
+    
+    # Toggle debug display
+    show_status = camera.toggle_validation_display()
+    
+    return jsonify({
+        'show_validation_status': show_status
+    })
+
 def cleanup_resources():
     """Ensure proper cleanup of resources when Flask shuts down."""
     global camera
