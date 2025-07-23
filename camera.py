@@ -1655,6 +1655,7 @@ import mediapipe as mp
 import time
 import threading
 from gesture_tracking import HandLandmarkTracker
+from gesture_detector import SelectionGestureDetector
 class LandmarkBuffer:
     """
     Maintains a time-sequenced buffer of hand landmark coordinates
@@ -1876,6 +1877,10 @@ class Camera:
         # Debug visualization
         self.show_validation_status = False
         
+        # Add selection gesture detector
+        self.selection_detector = SelectionGestureDetector(cooldown_period=1.0)
+        self.current_selection_gesture = None
+
     def start(self):
         """Start the camera capture thread"""
         if self.is_running:
@@ -2000,6 +2005,24 @@ class Camera:
                 
     #     return annotated_frame
 
+    def _draw_selection_indicator(self, frame, hand_landmarks):
+        """Draw visual feedback for selection gestures"""
+        h, w, c = frame.shape
+        
+        # Get index fingertip position
+        index_tip = hand_landmarks.landmark[8]
+        x, y = int(index_tip.x * w), int(index_tip.y * h)
+        
+        if self.current_selection_gesture == "tap":
+            # Draw tap indicator - blue circle
+            cv2.circle(frame, (x, y), 20, (255, 0, 0), -1)
+            cv2.circle(frame, (x, y), 25, (255, 255, 255), 2)
+        elif self.current_selection_gesture == "pinch":
+            # Draw pinch indicator - green circle
+            cv2.circle(frame, (x, y), 20, (0, 255, 0), -1)
+            cv2.circle(frame, (x, y), 25, (255, 255, 255), 2)
+
+
     def _process_frame(self, frame):
         """Process frame to detect hands and filter gestures"""
         # Your existing frame processing code...
@@ -2014,6 +2037,15 @@ class Camera:
         
         # Process gestures if hands are detected
         if results.multi_hand_landmarks and len(results.multi_hand_landmarks) > 0:
+
+
+            # Detect selection gestures (tap & pinch)
+            self.current_selection_gesture = self.selection_detector.update(results.multi_hand_landmarks)
+            
+            # Draw different visual feedback for selection gestures
+            if self.current_selection_gesture:
+                self._draw_selection_indicator(frame, results.multi_hand_landmarks[0])
+                
             # Add landmarks to the tracker
             self.landmark_tracker.add_landmarks(results.multi_hand_landmarks)
             
@@ -2932,6 +2964,23 @@ class Camera:
     #         cv2.putText(frame, line, (padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
     #         y += line_height
 
+    def get_jpeg_frame(self, processed=True):
+        """Return the current frame as JPEG bytes"""
+        with self.lock:
+            frame = self.processed_frame if processed and self.processed_frame is not None else self.frame
+            
+            if frame is None:
+                # Generate blank frame
+                blank_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+                cv2.putText(blank_frame, "No camera frame available", (50, 240), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                
+                ret, jpeg = cv2.imencode('.jpg', blank_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                return jpeg.tobytes() if ret else None
+            
+            # Encode frame to JPEG
+            ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            return jpeg.tobytes() if ret else None
     def _draw_validation_info(self, frame):
         """Draw enhanced validation information on frame for debugging"""
         # Get debug info from tracker
