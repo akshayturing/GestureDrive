@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block title %}GestureDrive - Gesture Profile Manager{% endblock %}
+
+{% block content %}
+<div>
+<h1>
+Gesture Profile Manager
+
+</h1>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+<p>
+<strong>
+Currently Active Profile:
+
+</strong>
+<span>
+loading...
+
+</span>
+<span>
+loading...
+
+</span>
+</p>
+</div>
+    </div>
+</div>
+<div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+<h5>
+Available Profiles
+
+</h5>
+<span>
+0
+
+</span>
+</div>
+<div>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="profile-search" 
+                           placeholder="Search profiles">
+<button>
+Clear
+
+</button>
+</div>
+<ul>
+<li>
+<div>
+<span>
+Loading...
+
+</span>
+</div>
+                        Loading profiles...
+</li>
+</ul>
+            </div>
+        </div>
+    </div>
+<div>
+        <div class="card">
+            <div class="card-header">
+<h5>
+Profile Actions
+
+</h5>
+</div>
+<div>
+                <div class="d-grid gap-2">
+<button>
+<i class="fas fa-plus"></i>
+
+Create New Profile
+
+</button>
+<button>
+<i class="fas fa-copy"></i>
+
+Clone Selected Profile
+
+</button>
+<button>
+<i class="fas fa-edit"></i>
+
+Edit Selected Profile
+
+</button>
+<button>
+<i class="fas fa-check"></i>
+
+Activate Selected Profile
+
+</button>
+<button>
+<i class="fas fa-download"></i>
+
+Export Selected Profile
+
+</button>
+</div>
+                <hr>
+<div>
+<button>
+<i class="fas fa-upload"></i>
+
+Import Profile
+
+</button>
+<button>
+<i class="fas fa-trash"></i>
+
+Delete Selected Profile
+
+</button>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+<div>
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+<h5>
+Profile Details
+
+</h5>
+</div>
+<div>
+                <div id="profile-details">
+<p>
+Select a profile to view details
+
+</p>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Profile Modal -->
+<div>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+<h5>
+Create New Profile
+
+</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+</div>
+<div>
+                <form id="profile-form">
+                    <input type="hidden" id="profile-id" value="">
+                    <div class="mb-3">
+<label>
+Profile Name
+
+</label>
+                        <input type="text" class="form-control" id="profile-name" 
+                               required minlength="3" maxlength="50">
+                        <div class="form-text">Choose a descriptive name for this profile.
+</div>
+                    </div>
+<div>
+<label>
+Description
+
+</label>
+<textarea class="form-control" id="profile-description" rows="3"></textarea>
+</div>
+<div>
+                        <input type="checkbox" class="form-check-input" id="as-user-profile">
+<label>
+                            Save as personal profile
+</label>
+                        <div class="form-text">
+                            Personal profiles are only visible to you. Otherwise, the profile
+                            will be available to all users.
+</div>
+                    </div>
+<div>
+<label>
+Base Profile
+
+</label>
+<select class="form-select" id="base-profile"></select>
+
+                        <div class="form-text">
+                            Choose a profile to use as a starting point.
+</div>
+                    </div>
+                </form>
+<div>
+<strong>
+Error:
+
+</strong>
+Please correct the following issues:
+
+<ul id="validation-error-list"></ul>
+</div>
+            </div>
+<div>
+<button>
+Cancel
+
+</button>
+<button>
+Save Profile
+
+</button>
+</div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+<h5>
+Confirm Deletion
+
+</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+</div>
+<div>
+<p>
+Are you sure you want to delete the profile
+"
+
+<span id="delete-profile-name"></span>
+
+"?
+
+</p>
+<p>
+This action cannot be undone.
+
+</p>
+</div>
+<div>
+<button>
+Cancel
+
+</button>
+<button>
+Delete Profile
+
+</button>
+</div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Profile Modal -->
+<div>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+<h5>
+Import Profile
+
+</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+</div>
+<div>
+                <form id="import-form">
+                    <div class="mb-3">
+<label>
+Profile JSON File
+
+</label>
+                        <input class="form-control" type="file" id="import-file" accept=".json">
+</div>
+<div>
+<label>
+New Profile Name (optional)
+
+</label>
+                        <input type="text" class="form-control" id="import-name"
+                               placeholder="Leave blank to use original name">
+</div>
+<div>
+                        <input type="checkbox" class="form-check-input" id="import-as-user">
+<label>
+                            Import as personal profile
+</label>
+</div>
+                </form>
+<div>
+<strong>
+Error:
+
+</strong>
+<span id="import-error-message"></span>
+
+</div>
+            </div>
+<div>
+<button>
+Cancel
+
+</button>
+<button>
+Import
+
+</button>
+</div>
+        </div>
+    </div>
+</div>
+</div>
+<script src="/static/js/profile_manager.js"></script>
+{% endblock %}
+

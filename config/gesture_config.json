@@ -1,0 +1,232 @@
+{
+    "version": "1.0.0",
+    "lastModified": "2025-07-22T09:15:00Z",
+    "defaultGestureCooldown": 800,
+    "gestureThresholds": {
+      "swipeVelocity": 0.15,
+      "holdDurationMs": 1000,
+      "pinchDistance": 0.05
+    },
+    
+    "individualGestures": {
+      "swipe_up": {
+        "action": "scroll",
+        "params": {
+          "direction": "up",
+          "amount": 1
+        },
+        "description": "Scroll up in the file list",
+        "enabled": true
+      },
+      "swipe_down": {
+        "action": "scroll",
+        "params": {
+          "direction": "down",
+          "amount": 1
+        },
+        "description": "Scroll down in the file list",
+        "enabled": true
+      },
+      "swipe_left": {
+        "action": "navigateBack",
+        "description": "Move to the previous directory",
+        "enabled": true
+      },
+      "swipe_right": {
+        "action": "enterDirectory",
+        "description": "Enter the selected directory",
+        "enabled": true
+      },
+      "open_palm": {
+        "action": "refreshDirectory",
+        "description": "Refresh the current directory listing",
+        "enabled": true
+      },
+      "fist": {
+        "action": "cancelOperation",
+        "description": "Cancel the current operation",
+        "enabled": true
+      },
+      "point_up": {
+        "action": "moveSelection",
+        "params": {
+          "direction": "up",
+          "amount": 1
+        },
+        "description": "Move selection up",
+        "enabled": true
+      },
+      "point_down": {
+        "action": "moveSelection",
+        "params": {
+          "direction": "down",
+          "amount": 1
+        },
+        "description": "Move selection down",
+        "enabled": true
+      },
+      "hold_open_palm": {
+        "action": "showContextMenu",
+        "description": "Show context menu for selected item",
+        "enabled": true
+      },
+      "pinch": {
+        "action": "zoom",
+        "params": {
+          "direction": "in",
+          "amount": 0.1
+        },
+        "description": "Zoom in",
+        "enabled": true
+      }
+    },
+    
+    "compoundGestures": {
+      "swipe_down_then_hold": {
+        "sequence": ["swipe_down", "hold_open_palm"],
+        "maxTimeBetweenMs": 1500,
+        "action": "deleteFile",
+        "params": {
+          "requireConfirmation": true
+        },
+        "description": "Delete the selected file (with confirmation)",
+        "enabled": true,
+        "priority": 10
+      },
+      "pinch_and_swipe_right": {
+        "concurrent": ["pinch", "swipe_right"],
+        "action": "compressFile",
+        "description": "Compress the selected file or folder",
+        "enabled": true,
+        "priority": 5
+      },
+      "double_swipe_up": {
+        "sequence": ["swipe_up", "swipe_up"],
+        "maxTimeBetweenMs": 1000,
+        "action": "navigateToParent",
+        "description": "Navigate to parent directory",
+        "enabled": true
+      }
+    },
+    
+    "contextualMappings": {
+      "fileBrowser": {
+        "context": "fileBrowser",
+        "description": "Gesture mappings specific to file browser module",
+        "gestureMappings": {
+          "open_palm": {
+            "action": "selectFile",
+            "description": "Select the current file"
+          },
+          "swipe_up_swipe_down": {
+            "action": "toggleHiddenFiles",
+            "description": "Toggle display of hidden files"
+          }
+        }
+      },
+      "imageViewer": {
+        "context": "imageViewer",
+        "description": "Gesture mappings specific to image viewer module",
+        "gestureMappings": {
+          "pinch": {
+            "action": "zoomImage",
+            "params": {
+              "amount": 0.2
+            },
+            "description": "Zoom in on the image"
+          },
+          "open_palm": {
+            "action": "panImage",
+            "description": "Pan the image when moving hand"
+          }
+        }
+      }
+    },
+    
+    "actions": {
+      "scroll": {
+        "handler": "file_manager.scroll_list",
+        "requiredParams": ["direction"],
+        "optionalParams": {
+          "amount": 1
+        },
+        "description": "Scroll the file list up or down",
+        "category": "navigation"
+      },
+      "navigateBack": {
+        "handler": "file_manager.navigate_back",
+        "description": "Navigate to previous directory",
+        "category": "navigation"
+      },
+      "enterDirectory": {
+        "handler": "file_manager.enter_directory",
+        "description": "Enter the selected directory",
+        "category": "navigation"
+      },
+      "refreshDirectory": {
+        "handler": "file_manager.refresh_directory",
+        "description": "Refresh the current directory listing",
+        "category": "navigation"
+      },
+      "cancelOperation": {
+        "handler": "system.cancel_operation",
+        "description": "Cancel the current operation",
+        "category": "system"
+      },
+      "deleteFile": {
+        "handler": "file_manager.delete_file",
+        "optionalParams": {
+          "requireConfirmation": true
+        },
+        "description": "Delete the selected file",
+        "category": "file_operation",
+        "requiresConfirmation": true
+      },
+      "compressFile": {
+        "handler": "file_manager.compress_file",
+        "description": "Compress the selected file or directory",
+        "category": "file_operation"
+      },
+      "moveSelection": {
+        "handler": "ui.move_selection",
+        "requiredParams": ["direction"],
+        "optionalParams": {
+          "amount": 1
+        },
+        "description": "Move the current selection",
+        "category": "navigation"
+      },
+      "showContextMenu": {
+        "handler": "ui.show_context_menu",
+        "description": "Display a context menu for the selected item",
+        "category": "ui"
+      },
+      "zoom": {
+        "handler": "ui.zoom",
+        "requiredParams": ["direction"],
+        "optionalParams": {
+          "amount": 0.1
+        },
+        "description": "Zoom in or out",
+        "category": "ui"
+      },
+      "toggleHiddenFiles": {
+        "handler": "file_manager.toggle_hidden_files",
+        "description": "Toggle the display of hidden files",
+        "category": "file_operation"
+      },
+      "zoomImage": {
+        "handler": "image_viewer.zoom",
+        "optionalParams": {
+          "amount": 0.1
+        },
+        "description": "Zoom in or out on the current image",
+        "category": "image_operation"
+      },
+      "panImage": {
+        "handler": "image_viewer.pan",
+        "description": "Pan the current image",
+        "category": "image_operation"
+      }
+    }
+  }

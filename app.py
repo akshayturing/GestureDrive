@@ -1176,9 +1176,19 @@ import atexit
 import cv2
 import numpy as np
 from flask import send_file  # Add this import
+import os
+import json
+from flask import jsonify, request, render_template
 
 from camera import Camera
 from gesture_file_controller import GestureFileController
+from profile_manager import ProfileManager
+
+# Initialize profile manager
+profile_manager = ProfileManager()
+
+# Connect profile manager with gesture config manager
+profile_manager.set_gesture_config_manager(gesture_controller.config_manager)
 
 # Initialize the Flask app
 app = Flask(__name__)
@@ -1606,3 +1616,523 @@ def api_process_selection():
         result['preview'] = preview_data
         
     return jsonify(result)
+
+# Add these routes to your Flask application
+@app.route('/gestures/settings')
+def gesture_settings():
+    return render_template('gesture_settings.html')
+
+@app.route('/api/gestures/config', methods=['GET'])
+def get_gesture_config():
+    """API endpoint to get the current gesture configuration summary."""
+    config_summary = gesture_controller.config_manager.get_gesture_configuration_summary()
+    return jsonify(config_summary)
+
+@app.route('/api/gestures/config/full', methods=['GET'])
+def get_full_gesture_config():
+    """API endpoint to get the full gesture configuration."""
+    try:
+        config_path = gesture_controller.config_manager.config_path
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/gestures/reload', methods=['POST'])
+def reload_gesture_config():
+    """API endpoint to trigger a reload of the gesture configuration."""
+    success = gesture_controller.reload_configuration()
+    return jsonify({"success": success})
+
+@app.route('/api/gestures/context/<context>', methods=['POST'])
+def set_gesture_context(context):
+    """API endpoint to change the current gesture context."""
+    gesture_controller.change_context(context)
+    return jsonify({"success": True, "context": context})
+
+@app.route('/api/gestures/detail/<gesture_name>')
+def get_gesture_detail(gesture_name):
+    """API endpoint to get detailed information about a specific gesture."""
+    try:
+        config = gesture_controller.config_manager.config
+        
+        # Check individual gestures
+        if gesture_name in config.get("individualGestures", {}):
+            details = config["individualGestures"][gesture_name]
+            
+            # Get action details if available
+            action_name = details.get("action")
+            action_details = config["actions"].get(action_name, {}) if action_name else None
+            
+            return jsonify({
+                "type": "individual",
+                "name": gesture_name,
+                "action": action_name,
+                "description": details.get("description", ""),
+                "params": details.get("params", {}),
+                "enabled": details.get("enabled", True),
+                "cooldownMs": details.get("cooldownMs", None),
+                "actionDetails": action_details
+            })
+            
+        # Check compound gestures
+        elif gesture_name in config.get("compoundGestures", {}):
+            details = config["compoundGestures"][gesture_name]
+            
+            # Get action details if available
+            action_name = details.get("action")
+            action_details = config["actions"].get(action_name, {}) if action_name else None
+            
+            return jsonify({
+                "type": "compound",
+                "name": gesture_name,
+                "action": action_name,
+                "description": details.get("description", ""),
+                "params": details.get("params", {}),
+                "enabled": details.get("enabled", True),
+                "sequence": details.get("sequence", []),
+                "concurrent": details.get("concurrent", []),
+                "maxTimeBetweenMs": details.get("maxTimeBetweenMs", None),
+                "priority": details.get("priority", 0),
+                "actionDetails": action_details
+            })
+            
+        # Gesture not found
+        else:
+            return jsonify({"error": "Gesture not found"}), 404
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/gestures/config/update', methods=['POST'])
+def update_gesture_config():
+    """API endpoint to update the gesture configuration file."""
+    try:
+        # Get the updated configuration
+        updated_config = request.get_json()
+        
+        # Validate the configuration
+        if not isinstance(updated_config, dict):
+            return jsonify({"success": False, "error": "Invalid configuration format"}), 400
+            
+        # Required fields
+        if "version" not in updated_config or "individualGestures" not in updated_config or "actions" not in updated_config:
+            return jsonify({
+                "success": False, 
+                "error": "Missing required fields in configuration"
+            }), 400
+            
+        # Write to the config file
+        config_path = gesture_controller.config_manager.config_path
+        
+        # Create parent directory if it doesn't exist
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        # Backup the current config file
+        if os.path.exists(config_path):
+            backup_path = config_path + ".backup"
+            with open(config_path, 'r') as src:
+                with open(backup_path, 'w') as dst:
+                    dst.write(src.read())
+                    
+        # Write the updated config
+        with open(config_path, 'w') as f:
+            json.dump(updated_config, f, indent=2)
+            
+        # Reload the configuration
+        success = gesture_controller.reload_configuration()
+        
+        return jsonify({"success": success})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# Add routes for profile management
+@app.route('/profiles')
+def profile_manager_page():
+    return render_template('profile_manager.html')
+
+@app.route('/api/profiles/list')
+def list_profiles():
+    """API endpoint to list all available profiles"""
+    profile_manager.refresh_available_profiles()
+    return jsonify({
+        "profiles": profile_manager.available_profiles,
+        "activeProfileId": profile_manager.active_profile
+    })
+
+@app.route('/api/profiles/details/<profile_id>')
+def get_profile_details(profile_id):
+    """API endpoint to get detailed information about a profile"""
+    profile_info = profile_manager.get_profile_info(profile_id)
+    
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    try:
+        with open(profile_info["path"], 'r') as f:
+            profile_data = json.load(f)
+        return jsonify(profile_data)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load profile: {str(e)}"}), 500
+
+@app.route('/api/profiles/create', methods=['POST'])
+def create_profile():
+    """API endpoint to create a new profile"""
+    data = request.json
+    
+    if not data or 'name' not in data:
+        return jsonify({"error": "Profile name is required"}), 400
+    
+    profile_id = profile_manager.create_new_profile(
+        name=data['name'],
+        description=data.get('description', ''),
+        as_user_profile=data.get('asUserProfile', False)
+    )
+    
+    if profile_id:
+        return jsonify({
+            "success": True,
+            "profileId": profile_id,
+            "message": f"Profile created successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to create profile"}), 500
+
+@app.route('/api/profiles/clone', methods=['POST'])
+def clone_profile():
+    """API endpoint to clone a profile"""
+    data = request.json
+    
+    if not data or 'sourceProfileId' not in data or 'newName' not in data:
+        return jsonify({"error": "Source profile ID and new name are required"}), 400
+    
+    profile_id = profile_manager.clone_profile(
+        profile_id=data['sourceProfileId'],
+        new_name=data['newName'],
+        as_user_profile=data.get('asUserProfile', False)
+    )
+    
+    if profile_id:
+        return jsonify({
+            "success": True,
+            "profileId": profile_id,
+            "message": f"Profile cloned successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to clone profile"}), 500
+
+@app.route('/api/profiles/update', methods=['PUT'])
+def update_profile():
+    """API endpoint to update a profile's metadata"""
+    data = request.json
+    
+    if not data or 'profileId' not in data or 'name' not in data:
+        return jsonify({"error": "Profile ID and name are required"}), 400
+    
+    # Get the profile
+    profile_info = profile_manager.get_profile_info(data['profileId'])
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    try:
+        with open(profile_info["path"], 'r') as f:
+            profile_data = json.load(f)
+        
+        # Update metadata
+        profile_data["profileName"] = data['name']
+        profile_data["description"] = data.get('description', '')
+        
+        # Save the updated profile
+        result = profile_manager.save_profile(profile_data, data['profileId'], overwrite=True)
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "profileId": result,
+                "message": f"Profile updated successfully: {result}"
+            })
+        else:
+            return jsonify({"error": "Failed to update profile"}), 500
+            
+    except Exception as e:
+        return jsonify({"error": f"Failed to update profile: {str(e)}"}), 500
+
+@app.route('/api/profiles/delete/<profile_id>', methods=['DELETE'])
+def delete_profile(profile_id):
+    """API endpoint to delete a profile"""
+    if profile_id == "default":
+        return jsonify({"error": "Cannot delete the default profile"}), 400
+    
+    if profile_manager.delete_profile(profile_id):
+        return jsonify({
+            "success": True,
+            "message": f"Profile deleted successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to delete profile"}), 500
+
+@app.route('/api/profiles/activate/<profile_id>', methods=['POST'])
+def activate_profile(profile_id):
+    """API endpoint to activate a profile"""
+    # Get the profile info for the name
+    profile_info = profile_manager.get_profile_info(profile_id)
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    if profile_manager.load_profile(profile_id):
+        return jsonify({
+            "success": True,
+            "profileId": profile_id,
+            "profileName": profile_info["name"],
+            "message": f"Profile activated successfully: {profile_id}"
+        })
+    else:
+        return jsonify({"error": "Failed to activate profile"}), 500
+
+@app.route('/api/profiles/export/<profile_id>')
+def export_profile(profile_id):
+    """API endpoint to export a profile"""
+    # Get the profile
+    profile_info = profile_manager.get_profile_info(profile_id)
+    if not profile_info:
+        return jsonify({"error": "Profile not found"}), 404
+    
+    try:
+        with open(profile_info["path"], 'r') as f:
+            profile_data = json.load(f)
+        
+        # Set content disposition for download
+        profile_name = profile_info["name"].replace(" ", "_").lower()
+        response = jsonify(profile_data)
+        response.headers["Content-Disposition"] = f"attachment; filename={profile_name}.json"
+        return response
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to export profile: {str(e)}"}), 500
+
+@app.route('/api/profiles/import', methods=['POST'])
+def import_profile():
+    """API endpoint to import a profile"""
+    if 'profileFile' not in request.files:
+        return jsonify({"error": "No profile file provided"}), 400
+    
+    profile_file = request.files['profileFile']
+    
+    if profile_file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+    
+    if not profile_file.filename.endswith('.json'):
+        return jsonify({"error": "Profile file must be a JSON file"}), 400
+    
+    try:
+        # Create a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            profile_file.save(tmp.name)
+            
+            # Import the profile
+            profile_id = profile_manager.import_profile(
+                import_path=tmp.name,
+                new_name=request.form.get('newName'),
+                as_user_profile=request.form.get('asUserProfile') == 'true'
+            )
+            
+            # Clean up the temporary file
+            os.unlink(tmp.name)
+            
+            if profile_id:
+                # Get the profile name
+                profile_info = profile_manager.get_profile_info(profile_id)
+                
+                return jsonify({
+                    "success": True,
+                    "profileId": profile_id,
+                    "profileName": profile_info["name"],
+                    "message": f"Profile imported successfully: {profile_id}"
+                })
+            else:
+                return jsonify({"error": "Failed to import profile"}), 500
+                
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON file"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Failed to import profile: {str(e)}"}), 500
+
+@app.route('/gestures/record')
+def gesture_record_page():
+    return render_template('gesture_record.html')
+
+@app.route('/api/gestures/start_recording', methods=['POST'])
+def start_gesture_recording():
+    # Get request data
+    data = request.get_json()
+    label = data.get('label', '')
+    duration = data.get('duration', 5)  # Default 5 seconds
+    
+    # Create recorder with the existing camera
+    from hand_motion_recorder import HandMotionRecorder
+    recorder = HandMotionRecorder(camera_id=gesture_controller.camera.camera_id)
+    
+    # Start recording
+    success = recorder.start_recording(label=label)
+    
+    if success:
+        # Store recorder in session
+        session['recorder'] = recorder
+        session['record_start_time'] = time.time()
+        session['record_duration'] = duration
+        
+        return jsonify({"success": True, "message": "Recording started"})
+    else:
+        return jsonify({"success": False, "error": "Failed to start recording"})
+
+@app.route('/api/gestures/stop_recording', methods=['POST'])
+def stop_gesture_recording():
+    recorder = session.get('recorder')
+    if not recorder:
+        return jsonify({"success": False, "error": "No active recording"})
+    
+    # Stop recording and save
+    recording_path = recorder.stop_recording()
+    
+    if recording_path:
+        return jsonify({
+            "success": True, 
+            "recording_path": recording_path,
+            "message": "Recording saved successfully"
+        })
+    else:
+        return jsonify({"success": False, "error": "Failed to save recording"})
+
+@app.route('/api/gestures/analyze_recording', methods=['POST'])
+def analyze_gesture_recording():
+    data = request.get_json()
+    recording_path = data.get('recording_path')
+    
+    if not recording_path or not os.path.exists(recording_path):
+        return jsonify({"success": False, "error": "Invalid recording path"})
+    
+    # Analyze the recording
+    from hand_motion_analyzer import HandMotionAnalyzer
+    analyzer = HandMotionAnalyzer()
+    
+    with open(recording_path, 'r') as f:
+        recording = json.load(f)
+    
+    # Extract features
+    features = analyzer.extract_features(recording)
+    
+    # Detect gestures
+    gestures = analyzer.detect_gestures(recording)
+    
+    return jsonify({
+        "success": True,
+        "features": features,
+        "gestures": gestures,
+        "message": "Analysis complete"
+    })
+
+@app.route('/api/gestures/export/<session_id>', methods=['GET'])
+def export_gesture_signature(session_id):
+    """API endpoint to export a gesture signature to JSON"""
+    # Extract the signature
+    signature = gesture_signature_manager.extract_signature_from_session(session_id)
+    
+    if not signature:
+        return jsonify({
+            "success": False,
+            "error": "Failed to extract signature"
+        }), 400
+    
+    # Create a model
+    model = gesture_signature_manager.extractor.build_gesture_model(signature)
+    
+    # Serialize to JSON
+    serialized = gesture_signature_manager.serialize_gesture_signature(signature, model)
+    
+    # Get gesture name for filename
+    gesture_name = signature.get("gesture_name", "gesture")
+    safe_name = gesture_name.replace(" ", "_").lower()
+    
+    # Return as downloadable file
+    response = jsonify(serialized)
+    response.headers["Content-Disposition"] = f"attachment; filename=gesture_{safe_name}.json"
+    return response
+
+@app.route('/api/gestures/import', methods=['POST'])
+def import_gesture_signature():
+    """API endpoint to import a gesture signature from JSON"""
+    if 'file' not in request.files:
+        return jsonify({
+            "success": False,
+            "error": "No file uploaded"
+        }), 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({
+            "success": False,
+            "error": "No file selected"
+        }), 400
+    
+    if not file.filename.endswith('.json'):
+        return jsonify({
+            "success": False,
+            "error": "File must be a JSON file"
+        }), 400
+    
+    try:
+        # Load file content
+        serialized = json.load(file)
+        
+        # Deserialize
+        signature, model = gesture_signature_manager.deserialize_gesture_signature(serialized)
+        
+        if not signature or not model:
+            return jsonify({
+                "success": False,
+                "error": "Invalid signature format"
+            }), 400
+        
+        # Save the model
+        model_path = gesture_signature_manager.extractor.save_gesture_model(
+            model, output_dir=str(MODEL_DIR)
+        )
+        
+        if not model_path:
+            return jsonify({
+                "success": False,
+                "error": "Failed to save model"
+            }), 500
+        
+        # Create gesture configuration
+        config = gesture_signature_manager.create_gesture_config(model)
+        
+        if not config:
+            return jsonify({
+                "success": False,
+                "error": "Failed to create gesture configuration"
+            }), 500
+        
+        # Force reload of gesture configuration
+        gesture_controller.reload_configuration()
+        
+        return jsonify({
+            "success": True,
+            "gesture_name": signature.get("gesture_name"),
+            "message": f"Imported gesture '{signature.get('gesture_name')}' successfully"
+        })
+        
+    except json.JSONDecodeError:
+        return jsonify({
+            "success": False,
+            "error": "Invalid JSON file"
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Error importing gesture: {str(e)}"
+        }), 500

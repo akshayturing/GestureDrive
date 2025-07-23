@@ -1,0 +1,228 @@
+{
+    "schemaVersion": "1.0",
+    "metadata": {
+      "gestureName": "Circle Swipe",
+      "created": "2025-07-22T10:15:30Z",
+      "lastModified": "2025-07-22T10:15:30Z",
+      "author": "User",
+      "description": "A circular swiping motion with the index finger",
+      "tags": ["navigation", "selection", "circular"],
+      "trainingSource": {
+        "sessionId": "circle_swipe_20250722_101530_a1b2c3d4",
+        "exampleCount": 5,
+        "totalFrames": 172
+      }
+    },
+    "signature": {
+      "trajectoryFeatures": {
+        "landmark_0": {
+          "path_length": 2.137,
+          "displacement": 0.142,
+          "straightness": 0.066,
+          "mean_curvature": 0.512,
+          "max_curvature": 1.821,
+          "curvature_std": 0.437,
+          "x_range": 0.285,
+          "y_range": 0.312,
+          "area": 0.067,
+          "primary_direction_x": 0.023,
+          "primary_direction_y": -0.012
+        },
+        "landmark_8": {
+          "path_length": 3.217,
+          "displacement": 0.089,
+          "straightness": 0.028,
+          "mean_curvature": 0.398,
+          "max_curvature": 1.205,
+          "curvature_std": 0.312,
+          "x_range": 0.412,
+          "y_range": 0.398,
+          "area": 0.128,
+          "primary_direction_x": 0.037,
+          "primary_direction_y": -0.019
+        },
+        "landmark_0_landmark_8_avg_dist": 0.243,
+        "landmark_0_landmark_8_max_dist": 0.317,
+        "landmark_0_landmark_8_min_dist": 0.186
+      },
+      "velocityFeatures": {
+        "landmark_0": {
+          "mean_speed": 0.427,
+          "max_speed": 0.823,
+          "min_speed": 0.123,
+          "speed_std": 0.156,
+          "speed_changes": 0.873,
+          "acceleration_count": 8,
+          "deceleration_count": 7,
+          "mean_direction": 0.0,
+          "direction_consistency": 0.152,
+          "direction_changes": 12
+        },
+        "landmark_8": {
+          "mean_speed": 0.624,
+          "max_speed": 1.237,
+          "min_speed": 0.182,
+          "speed_std": 0.213,
+          "speed_changes": 1.124,
+          "acceleration_count": 9,
+          "deceleration_count": 8,
+          "mean_direction": 0.0,
+          "direction_consistency": 0.117,
+          "direction_changes": 14
+        },
+        "global": {
+          "mean_speed": 0.517,
+          "max_speed": 1.056,
+          "speed_pattern": [0.2, 0.5, 0.8, 1.0, 0.9, 0.7, 0.6, 0.8, 0.5, 0.2],
+          "speed_variability": 0.412
+        }
+      },
+      "accelerationFeatures": {
+        "landmark_0": {
+          "mean_acceleration": 0.245,
+          "max_acceleration": 0.567,
+          "acceleration_std": 0.123,
+          "zero_crossings_x": 5,
+          "zero_crossings_y": 4
+        },
+        "landmark_8": {
+          "mean_acceleration": 0.372,
+          "max_acceleration": 0.823,
+          "acceleration_std": 0.156,
+          "zero_crossings_x": 6,
+          "zero_crossings_y": 5
+        },
+        "global": {
+          "mean_acceleration": 0.306,
+          "max_acceleration": 0.721,
+          "acceleration_variability": 0.367
+        }
+      },
+      "handShapeFeatures": {
+        "distance_0_1": {
+          "mean": 0.217,
+          "std": 0.032,
+          "min": 0.172,
+          "max": 0.283,
+          "range": 0.111,
+          "variance": 0.001
+        },
+        "angle_0_1": {
+          "mean": 0.782,
+          "consistency": 0.823,
+          "range": 0.432
+        },
+        "fingertips": {
+          "tip_0_dist": {
+            "mean": 0.143,
+            "std": 0.027,
+            "min": 0.102,
+            "max": 0.192
+          },
+          "max_spread": {
+            "mean": 0.386,
+            "std": 0.057,
+            "min": 0.312,
+            "max": 0.487
+          }
+        },
+        "global": {
+          "shape_variability": 0.012,
+          "shape_change_rate": 0.0003
+        }
+      },
+      "patternClusters": {
+        "trajectories": {
+          "landmark_0": [
+            [0.3, 0.5, 0.0], [0.32, 0.45, 0.0], [0.35, 0.4, 0.0],
+            [0.4, 0.35, 0.0], [0.45, 0.32, 0.0], [0.5, 0.3, 0.0],
+            [0.55, 0.32, 0.0], [0.6, 0.35, 0.0], [0.65, 0.4, 0.0],
+            [0.68, 0.45, 0.0], [0.7, 0.5, 0.0], [0.68, 0.55, 0.0],
+            [0.65, 0.6, 0.0], [0.6, 0.65, 0.0], [0.55, 0.68, 0.0],
+            [0.5, 0.7, 0.0], [0.45, 0.68, 0.0], [0.4, 0.65, 0.0],
+            [0.35, 0.6, 0.0], [0.32, 0.55, 0.0], [0.3, 0.5, 0.0]
+          ],
+          "landmark_8": [
+            [0.2, 0.5, 0.0], [0.22, 0.4, 0.0], [0.28, 0.3, 0.0],
+            [0.35, 0.22, 0.0], [0.45, 0.18, 0.0], [0.55, 0.15, 0.0],
+            [0.65, 0.18, 0.0], [0.75, 0.22, 0.0], [0.82, 0.3, 0.0],
+            [0.88, 0.4, 0.0], [0.9, 0.5, 0.0], [0.88, 0.6, 0.0],
+            [0.82, 0.7, 0.0], [0.75, 0.78, 0.0], [0.65, 0.82, 0.0],
+            [0.55, 0.85, 0.0], [0.45, 0.82, 0.0], [0.35, 0.78, 0.0],
+            [0.28, 0.7, 0.0], [0.22, 0.6, 0.0], [0.2, 0.5, 0.0]
+          ]
+        },
+        "velocities": {
+          "landmark_0": {
+            "mean_magnitude": 0.427,
+            "std_magnitude": 0.156,
+            "magnitude_profile": [0.2, 0.4, 0.5, 0.6, 0.5, 0.4, 0.3, 0.5, 0.4, 0.2],
+            "mean_direction": 0.0,
+            "direction_consistency": 0.152
+          },
+          "landmark_8": {
+            "mean_magnitude": 0.624,
+            "std_magnitude": 0.213,
+            "magnitude_profile": [0.3, 0.6, 0.8, 0.9, 0.7, 0.5, 0.4, 0.7, 0.5, 0.3],
+            "mean_direction": 0.0,
+            "direction_consistency": 0.117
+          }
+        },
+        "handShapes": {
+          "distance_0_1": {
+            "mean": 0.217,
+            "std": 0.032,
+            "min": 0.172,
+            "max": 0.283
+          },
+          "angle_0_1": {
+            "mean": 0.782,
+            "consistency": 0.823
+          }
+        }
+      }
+    },
+    "recognitionParams": {
+      "similarityThreshold": 0.78,
+      "minFrames": 10,
+      "maxFrames": 45,
+      "temporalWindow": 30,
+      "cooldownFrames": 15,
+      "featureWeights": {
+        "trajectory": 0.5,
+        "velocity": 0.3,
+        "acceleration": 0.1,
+        "handShape": 0.1
+      }
+    },
+    "actionMapping": {
+      "defaultAction": {
+        "name": "circleSwipe",
+        "handler": "custom_gestures.handle_circle_swipe",
+        "description": "Perform a circular selection action",
+        "params": {
+          "radius": "medium",
+          "direction": "clockwise",
+          "selectionMode": "toggle"
+        }
+      },
+      "contextualMappings": {
+        "fileBrowser": {
+          "name": "selectFiles",
+          "handler": "file_manager.select_files_in_circle",
+          "description": "Select files in a circular region",
+          "params": {
+            "selectionMode": "multiple"
+          }
+        },
+        "imageViewer": {
+          "name": "circularCrop",
+          "handler": "image_viewer.circular_crop",
+          "description": "Crop image in a circular shape",
+          "params": {
+            "aspectRatio": "preserve"
+          }
+        }
+      }
+    }
+  }
